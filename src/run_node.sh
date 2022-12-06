@@ -1,3 +1,3 @@
 #!bash
 
-go run ./main.go ./utils.go $@
+go run ./main.go ./utils.go ./dht.go $@
