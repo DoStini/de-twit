@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 )
 
-func main2() {
-	_, cancel := context.WithCancel(context.Background())
+func main() {
+	port := flag.Int64("port", 4000, "The port of this host")
+	bootstrap := flag.String("bootstrap", "", "The bootstrapping node")
+	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	h := createNode(4001)

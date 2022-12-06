@@ -4,90 +4,92 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
 	"log"
 )
 
-// MakePeer takes a fully-encapsulated address and converts it to a
-// peer ID / Multiaddress pair
-func MakePeer(dest string) (peer.ID, multiaddr.Multiaddr) {
-	ipfsAddr, err := multiaddr.NewMultiaddr(dest)
-	if err != nil {
-		log.Fatalf("Err on creating host: %v", err)
-	}
-	log.Printf("Parsed: ipfsAddr = %s", ipfsAddr)
-
-	peerIDStr, err := ipfsAddr.ValueForProtocol(multiaddr.P_IPFS)
-	if err != nil {
-		log.Fatalf("Err on creating peerIDStr: %v", err)
-	}
-	log.Printf("Parsed: PeerIDStr = %s", peerIDStr)
-
-	targetPeerAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peerIDStr))
-	log.Printf("Created targetPeerAddr = %v", targetPeerAddr)
-
-	targetAddr := ipfsAddr.Decapsulate(targetPeerAddr)
-	log.Printf("Decapsulated = %v", targetAddr)
-
-	return peer.ID(peerIDStr), targetAddr
-}
-
-func addressWithPort(port int64) (multiaddr.Multiaddr, error) {
-	return multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port))
-}
-
-func createNode(port int64) host.Host {
-	privKey := generatePrivateKey(port)
-
-	addr, err := addressWithPort(port)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	h, err := libp2p.New(
-		libp2p.Identity(privKey),
-		libp2p.ListenAddrs(
-			addr,
-		),
-	)
-	if err != nil {
-		log.Fatalf("Err on creating host: %v", err)
-	}
-
-	return h
-}
-
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
-	//node := flag.String()
+	bootstrap := flag.String("bootstrap", "", "The bootstrapping node")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	h := createNode(*port)
-	hostID := h.ID()
 
-	kad, err := dht.New(ctx, h, dht.BootstrapPeers(peer.AddrInfo{ID: hostID}))
+	opts := []dht.Option{
+		dht.Mode(dht.ModeServer),
+	}
+
+	if *bootstrap != "" {
+		addr, err := multiaddr.NewMultiaddr(*bootstrap)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+		peerInfo, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+		opts = append(opts, dht.BootstrapPeers(*peerInfo))
+		h.Peerstore().AddAddr(peerInfo.ID, peerInfo.Addrs[0], peerstore.PermanentAddrTTL)
+		err = h.Connect(ctx, *peerInfo)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+	}
+
+	ctx, eventChannel := dht.RegisterForLookupEvents(ctx)
+	kad, err := dht.New(ctx, h, opts...)
+
 	if err != nil {
-		log.Fatalf("Err on creating dht")
+		log.Println("Err on creating dht")
+		log.Fatalf(err.Error())
 	}
 	err = kad.Bootstrap(ctx)
 	if err != nil {
-		log.Fatalf(err.Error())
+		return
 	}
 
-	// kad.FindPeer(ctx, h.ID())
+	peer, err := kad.FindPeer(ctx, h.ID())
+	if err != nil {
+		log.Println(err.Error())
+	} else {
+		log.Println(peer.ID)
+		log.Println(peer.Addrs)
+	}
+	kad.RoutingTable().Print()
 
+	hostID := h.ID()
 	log.Printf("Host MultiAddress: %s/ipfs/%s", h.Addrs()[0].String(), hostID)
-	MakePeer(fmt.Sprintf("%s/ipfs/%s", h.Addrs()[0].String(), hostID))
 
-	// shut the node down
-	if err := h.Close(); err != nil {
-		panic(err)
+	defer func() {
+		fmt.Println("test")
+		// shut the node down
+		if err := h.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	for {
+		select {
+		case event := <-eventChannel:
+			log.Println("RECV EVENT")
+			log.Println(event.ID)
+			log.Println(event.Node)
+			log.Println(event.Request)
+
+			peer, err := kad.FindPeer(ctx, h.ID())
+			if err != nil {
+				log.Println(err.Error())
+			} else {
+				log.Println(peer.ID)
+				log.Println(peer.Addrs)
+			}
+			kad.RoutingTable().Print()
+		}
 	}
 }
