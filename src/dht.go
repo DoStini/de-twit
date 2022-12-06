@@ -11,6 +11,23 @@ import (
 	"sync"
 )
 
+type NullValidator struct{}
+
+// Validate always returns success
+func (nv NullValidator) Validate(key string, value []byte) error {
+	return nil
+}
+
+// Select always selects the first record
+func (nv NullValidator) Select(key string, values [][]byte) (int, error) {
+	strs := make([]string, len(values))
+	for i := 0; i < len(values); i++ {
+		strs[i] = string(values[i])
+	}
+
+	return 0, nil
+}
+
 func startDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host) {
 	var bootstrapNodeInfos []peer.AddrInfo
 
@@ -18,6 +35,8 @@ func startDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ip
 
 	opts := []dht.Option{
 		dht.Mode(dht.ModeServer),
+		dht.Validator(NullValidator{}),
+		dht.ProtocolPrefix("/p2p"),
 	}
 
 	for _, node := range bootstrapNodes {

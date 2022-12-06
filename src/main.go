@@ -23,7 +23,8 @@ func main() {
 	kad, host := startDHT(ctx, *port, bootstrapNodes)
 
 	hostID := host.ID()
-	log.Printf("Created Node at: %s/ipfs/%s", host.Addrs()[0].String(), hostID)
+
+	log.Printf("Created Node at: %s/p2p/%s", host.Addrs()[0].String(), hostID)
 	log.Printf("Node ID: %s", hostID)
 
 	defer func() {
@@ -35,5 +36,22 @@ func main() {
 	for {
 		time.Sleep(time.Second * 3)
 		kad.RoutingTable().Print()
+
+		storeData := []byte(time.Now().String())
+
+		key := "key"
+
+		value, err := kad.GetValue(ctx, key)
+
+		if err != nil {
+			log.Println(err)
+		}
+
+		log.Println("got the thing", string(value))
+		err = kad.PutValue(ctx, key, storeData)
+		if err != nil {
+			log.Println(key)
+			log.Println("here", err)
+		}
 	}
 }
