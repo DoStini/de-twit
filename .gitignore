@@ -1,5 +1,5 @@
 bootstrap
 node
 bootstraps/*.txt
-timeline/*/*
+storage/*/*
 logs/*.log

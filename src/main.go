@@ -5,8 +5,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"log"
 	"os"
+	"path/filepath"
 	"src/common"
 	"src/timeline"
 )
@@ -16,10 +18,15 @@ func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	storage := flag.String("storage", "", "The directory where program files are stored")
+	username := flag.String("username", "", "The port of this host")
 	flag.Parse()
 
+	if *username == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
 	if *storage == "" {
-		*storage = fmt.Sprintf("timeline/%d", *port)
+		*storage = filepath.Join("storage", fmt.Sprintf("%s", *username))
 	}
 
 	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE | os.O_WRONLY, 0644)
@@ -62,20 +69,16 @@ func main() {
 		}
 	}()
 
-	/* go func(kad *dht.IpfsDHT) {
-		ticker := time.NewTicker(2000 * time.Millisecond)
+	ps, err := pubsub.NewGossipSub(ctx, host)
+	if err != nil {
+		logger.Fatalln(err)
+	}
+	topic, err := ps.Join(*username)
+	if err != nil {
+		return
+	}
 
-		for {
-			select {
-			case <-ticker.C:
-				logger.Println("ROUTING TABLE:")
-				kad.RoutingTable().Print()
-			}
-		}
-	}(kad) */
-
-	storedTimeline := timeline.CreateOrReadTimeline(*storage)
-
+	storedTimeline := timeline.CreateOrReadTimeline(*storage, topic)
 	inputScanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("Waiting for input")
