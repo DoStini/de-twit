@@ -5,14 +5,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
+	"net/http"
 	"os"
 	"src/common"
-	"time"
 )
 
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
+	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	flag.Parse()
 
@@ -58,13 +60,16 @@ func main() {
 		}
 	}()
 
-	ticker := time.NewTicker(2000 * time.Millisecond)
+	r := gin.Default()
+	r.GET("/routing/info", func(c *gin.Context) {
+		kad.RoutingTable().Print()
 
-	for {
-		select {
-		case <-ticker.C:
-			logger.Println("ROUTING TABLE:")
-			kad.RoutingTable().Print()
-		}
+		c.String(http.StatusOK, "ok")
+	})
+
+	err = r.Run(fmt.Sprintf(":%d", *servePort))
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
 	}
 }
