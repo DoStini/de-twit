@@ -53,7 +53,7 @@ func generatePrivateKey(ctx context.Context, seed int64) crypto.PrivKey {
 	return prvKey
 }
 
-func generateCid(ctx context.Context, key string) (cid.Cid, error) {
+func GenerateCid(ctx context.Context, key string) (cid.Cid, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	pref := cid.Prefix{
