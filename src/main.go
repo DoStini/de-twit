@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"src/common"
 	"time"
 )
 
@@ -44,7 +45,7 @@ func main() {
 		logger.Fatalf(err.Error())
 	}
 
-	kad, host := startDHT(ctx, *port, bootstrapNodes)
+	kad, host := common.StartDHT(ctx, *port, bootstrapNodes)
 
 	hostID := host.ID()
 	logger.Printf("Created Node at: %s/p2p/%s", host.Addrs()[0].String(), hostID)
