@@ -11,21 +11,22 @@ import (
 	"time"
 )
 
-
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	flag.Parse()
 
-	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE | os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	logger = log.New(logFile, fmt.Sprintf("node:%d  |  ", *port), log.Ltime | log.Lshortfile)
+	logger = log.New(logFile, fmt.Sprintf("node:%d  |  ", *port), log.Ltime|log.Lshortfile)
 
 	defer logFile.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, "logger", logger)
+
 	defer cancel()
 
 	f, err := os.OpenFile(*bootstrap, os.O_RDONLY, 0644)
@@ -61,7 +62,7 @@ func main() {
 
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			logger.Println("ROUTING TABLE:")
 			kad.RoutingTable().Print()
 		}
