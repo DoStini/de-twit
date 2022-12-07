@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func (nv NullValidator) Select(key string, values [][]byte) (int, error) {
 	return 0, nil
 }
 
-func startDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host) {
+func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host) {
 	var bootstrapNodeInfos []peer.AddrInfo
 
 	h := createNode(port)
