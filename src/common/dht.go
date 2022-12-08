@@ -52,8 +52,8 @@ func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ip
 		}
 
 		bootstrapNodeInfos = append(bootstrapNodeInfos, *peerInfo)
-		opts = append(opts, dht.BootstrapPeers(*peerInfo))
 	}
+	opts = append(opts, dht.BootstrapPeers(bootstrapNodeInfos...))
 
 	kad, err := dht.New(ctx, h, opts...)
 
