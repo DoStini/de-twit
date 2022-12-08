@@ -6,20 +6,32 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"src/common"
 	"src/service"
+	"src/timeline"
 )
 
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
 	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
-	username := flag.String("user", "", "The username")
+	storage := flag.String("storage", "", "The directory where program files are stored")
+	username := flag.String("username", "", "The port of this host")
 	flag.Parse()
+
+	if *username == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+	if *storage == "" {
+		*storage = filepath.Join("storage", fmt.Sprintf("%s", *username))
+	}
 
 	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -63,18 +75,6 @@ func main() {
 		}
 	}()
 
-	c, err := common.GenerateCid(ctx, *username)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
-	err = kad.Provide(ctx, c, true)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
 	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
@@ -90,6 +90,29 @@ func main() {
 			return
 		}
 	})
+
+	ps, err := pubsub.NewGossipSub(ctx, host)
+	if err != nil {
+		logger.Fatalln(err)
+	}
+	topic, err := ps.Join(*username)
+	if err != nil {
+		return
+	}
+
+	storedTimeline := timeline.CreateOrReadTimeline(*storage, topic)
+
+	c, err := common.GenerateCid(ctx, *username)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
+
+	err = kad.Provide(ctx, c, true)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
 
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
@@ -111,7 +134,24 @@ func main() {
 		c.JSON(http.StatusOK, posts)
 
 		// TODO: SETUP PUB SUB
+	})
 
+	r.POST("/post/create", func(c *gin.Context) {
+		var json PostRequest
+
+		if err = c.ShouldBindJSON(&json); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		storedTimeline.AddPost(json.Text)
+
+		logger.Println("Current Timeline: ")
+
+		for _, post := range storedTimeline.Posts {
+			logger.Println(post.Text)
+			logger.Printf("Posted at %s", post.LastUpdated.String())
+		}
 	})
 
 	err = r.Run(fmt.Sprintf(":%d", *servePort))
@@ -119,4 +159,8 @@ func main() {
 		logger.Fatalf(err.Error())
 		return
 	}
+}
+
+type PostRequest struct {
+	Text string `json:"text" binding:"required"`
 }

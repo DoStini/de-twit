@@ -1,0 +1,17 @@
+syntax='proto3';
+package timeline;
+
+import 'google/protobuf/timestamp.proto';
+
+option go_package= "src/timelinepb";
+
+message Timeline {
+  // TODO: USER
+  repeated Post posts = 1;
+}
+
+message Post {
+  string text = 1;
+  string id = 2;
+  google.protobuf.Timestamp last_updated = 3;
+}
