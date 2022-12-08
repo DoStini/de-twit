@@ -1,4 +1,7 @@
 bootstrap
 node
 bootstraps/*.txt
-logs/*.log
+*logs/*.log
+*.idea
+
+
