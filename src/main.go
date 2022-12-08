@@ -6,16 +6,19 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/libp2p/go-libp2p/core/network"
 	"log"
 	"net/http"
 	"os"
 	"src/common"
+	"src/service"
 )
 
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
 	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
+	username := flag.String("user", "", "The username")
 	flag.Parse()
 
 	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
@@ -60,11 +63,55 @@ func main() {
 		}
 	}()
 
+	c, err := common.GenerateCid(ctx, *username)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
+
+	err = kad.Provide(ctx, c, true)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
+
+	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
+		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+		_, err = rw.WriteString(fmt.Sprintf("resp from %d\n", *port))
+		if err != nil {
+			logger.Fatalf(err.Error())
+			return
+		}
+
+		err = rw.Flush()
+		if err != nil {
+			logger.Fatalf(err.Error())
+			return
+		}
+	})
+
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
 		kad.RoutingTable().Print()
 
 		c.String(http.StatusOK, "ok")
+	})
+
+	r.POST("/:user/subscribe", func(c *gin.Context) {
+		user := c.Param("user")
+
+		posts, err := service.Follow(ctx, host, kad, user)
+
+		if err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		c.JSON(http.StatusOK, posts)
+
+		// TODO: SETUP PUB SUB
+
 	})
 
 	err = r.Run(fmt.Sprintf(":%d", *servePort))
