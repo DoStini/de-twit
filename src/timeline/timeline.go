@@ -31,13 +31,13 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 			log.Fatalln("Error creating folders: ", err)
 		}
 
-		timelineFile, err := os.OpenFile(path, os.O_CREATE | os.O_WRONLY, 0644)
+		timelineFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatalln("Error creating storage file: ", err)
 		}
 
 		// TODO: GET TIMELINE FROM SUBSCRIBERS
-		storedTimeline = Timeline{Timeline: pb.Timeline{Posts: []*pb.Post{} }}
+		storedTimeline = Timeline{Timeline: pb.Timeline{Posts: []*pb.Post{}}}
 		out, err := proto.Marshal(&storedTimeline.Timeline)
 		if err != nil {
 			log.Fatalln("Error marshalling storage: ", err)
@@ -68,7 +68,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 
 type Timeline struct {
 	pb.Timeline
-	path string
+	path  string
 	topic *pubsub.Topic
 }
 

@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/ipfs/go-cid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"net/http"
 	"os"
@@ -58,6 +60,8 @@ func main() {
 		bootstrapNodes = append(bootstrapNodes, s)
 	}
 
+	var followingCids []cid.Cid
+
 	err = f.Close()
 	if err != nil {
 		logger.Fatalf(err.Error())
@@ -75,22 +79,6 @@ func main() {
 		}
 	}()
 
-	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-		_, err = rw.WriteString(fmt.Sprintf("resp from %d\n", *port))
-		if err != nil {
-			logger.Fatalf(err.Error())
-			return
-		}
-
-		err = rw.Flush()
-		if err != nil {
-			logger.Fatalf(err.Error())
-			return
-		}
-	})
-
 	ps, err := pubsub.NewGossipSub(ctx, host)
 	if err != nil {
 		logger.Fatalln(err)
@@ -102,17 +90,60 @@ func main() {
 
 	storedTimeline := timeline.CreateOrReadTimeline(*storage, topic)
 
-	c, err := common.GenerateCid(ctx, *username)
+	nodeCid, err := common.GenerateCid(ctx, *username)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
 	}
 
-	err = kad.Provide(ctx, c, true)
+	err = kad.Provide(ctx, nodeCid, true)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
 	}
+
+	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
+		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+		resp, err := rw.ReadBytes(0)
+		if err != nil {
+			logger.Println(err.Error())
+		}
+
+		cidResp := resp[:len(resp)-1]
+
+		requestedCid, err := cid.Cast(cidResp)
+		if err != nil {
+			logger.Println(err.Error())
+			stream.Close()
+			return
+		}
+
+		var reply []byte
+
+		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
+			reply, err = proto.Marshal(&storedTimeline.Timeline)
+			if err != nil {
+				log.Println("Failed to encode post:", err)
+				return
+			}
+		} else {
+			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
+			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", *port))
+		}
+
+		_, err = rw.Write(append(reply, 0))
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
+
+		err = rw.Flush()
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
+	})
 
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
@@ -121,10 +152,10 @@ func main() {
 		c.String(http.StatusOK, "ok")
 	})
 
-	r.POST("/:user/subscribe", func(c *gin.Context) {
+	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		posts, err := service.Follow(ctx, host, kad, user)
+		posts, err := service.Follow(ctx, host, kad, &followingCids, user)
 
 		if err != nil {
 			c.String(http.StatusInternalServerError, err.Error())
@@ -134,6 +165,21 @@ func main() {
 		c.JSON(http.StatusOK, posts)
 
 		// TODO: SETUP PUB SUB
+	})
+
+	r.POST("/:user/unfollow", func(c *gin.Context) {
+		user := c.Param("user")
+
+		err := service.Unfollow(ctx, &followingCids, user)
+
+		if err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		c.String(http.StatusOK, "ok")
+
+		// TODO: DISCONNECT PUB SUB
 	})
 
 	r.POST("/post/create", func(c *gin.Context) {

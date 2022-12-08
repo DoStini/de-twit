@@ -68,3 +68,29 @@ func GenerateCid(ctx context.Context, key string) (cid.Cid, error) {
 	}
 	return c, err
 }
+
+func Contains(list []cid.Cid, val cid.Cid) bool {
+	for _, b := range list {
+		if b == val {
+			return true
+		}
+	}
+	return false
+}
+
+func FindIndex(list []cid.Cid, val cid.Cid) int {
+	for i, b := range list {
+		if b == val {
+			return i
+		}
+	}
+	return -1
+}
+
+func RemoveIndex(list []cid.Cid, index int) []cid.Cid {
+	last := len(list) - 1
+	list[index] = list[last]
+	list = list[:last]
+
+	return list
+}

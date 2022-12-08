@@ -3,21 +3,23 @@ package service
 import (
 	"bufio"
 	"context"
+	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"src/common"
+	timeline "src/timeline"
 )
 
-func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, user string) ([]string, error) {
+func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids *[]cid.Cid, user string) ([]string, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var peers []peer.AddrInfo
 
 	c, err := common.GenerateCid(ctx, user)
 	if err != nil {
-		logger.Fatalf(err.Error())
 		return nil, err
 	}
 
@@ -45,19 +47,54 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, user string) 
 
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-		resp, err := rw.ReadString('\n')
+		_, err = rw.Write(append(c.Bytes(), 0))
 		if err != nil {
 			return nil, err
 		}
 
-		peerResps = append(peerResps, string(resp))
+		err = rw.Flush()
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := rw.ReadBytes(0)
+		if err != nil {
+			return nil, err
+		}
+
+		resp = resp[:len(resp)-1]
+
+		var t timeline.Timeline
+
+		err = proto.Unmarshal(resp, &t.Timeline)
+
+		if err != nil {
+			logger.Println(err.Error())
+			peerResps = append(peerResps, string(resp))
+		} else {
+			peerResps = append(peerResps, t.String())
+		}
 	}
 
 	err = kad.Provide(ctx, c, true)
 	if err != nil {
-		logger.Fatalf(err.Error())
 		return nil, err
 	}
 
+	*followingCids = append(*followingCids, c)
+
 	return peerResps, nil
+}
+
+func Unfollow(ctx context.Context, followingCids *[]cid.Cid, user string) error {
+
+	c, err := common.GenerateCid(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	index := common.FindIndex(*followingCids, c)
+	*followingCids = common.RemoveIndex(*followingCids, index)
+
+	return nil
 }
