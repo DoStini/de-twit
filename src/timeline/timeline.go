@@ -36,7 +36,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 			log.Fatalln("Error creating storage file: ", err)
 		}
 
-		// TODO: GET TIMELINE FROM SUBSCRIBERS
+		// TODO: GET TIMELINE FROM SUBSCRIBERS, AND TIMELINE OF SUBSCRIBED
 		storedTimeline = Timeline{Timeline: pb.Timeline{Posts: []*pb.Post{} }}
 		out, err := proto.Marshal(&storedTimeline.Timeline)
 		if err != nil {
@@ -53,6 +53,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 			log.Println(err)
 		}
 	} else if err == nil {
+		// TODO: POSSIBLY, MERGE SUBSCRIBED TIMELINES FROM OTHER SUBSCRIBERS
 		err := proto.Unmarshal(timelineBytes, &storedTimeline.Timeline)
 		if err != nil {
 			log.Fatal(err)

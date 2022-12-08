@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"log"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"path/filepath"
 	"src/common"
 	"src/service"
+	"src/subscription"
 	"src/timeline"
 )
 
@@ -22,7 +22,7 @@ func main() {
 	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	storage := flag.String("storage", "", "The directory where program files are stored")
-	username := flag.String("username", "", "The port of this host")
+	username := flag.String("username", "", "The username")
 	flag.Parse()
 
 	if *username == "" {
@@ -91,16 +91,12 @@ func main() {
 		}
 	})
 
-	ps, err := pubsub.NewGossipSub(ctx, host)
+	pubSubUpdate, err := subscription.MakePubSub(&ctx, &host, *username)
 	if err != nil {
 		logger.Fatalln(err)
 	}
-	topic, err := ps.Join(*username)
-	if err != nil {
-		return
-	}
 
-	storedTimeline := timeline.CreateOrReadTimeline(*storage, topic)
+	storedTimeline := timeline.CreateOrReadTimeline(*storage, pubSubUpdate.UserTopic)
 
 	c, err := common.GenerateCid(ctx, *username)
 	if err != nil {
@@ -131,9 +127,23 @@ func main() {
 			return
 		}
 
-		c.JSON(http.StatusOK, posts)
+		// after follow, peers should be connected, so they belong on the same pub sub network
+		subTopic, err := pubSubUpdate.PubS.Join(fmt.Sprintf("%s", user))
+		if err != nil {
+			logger.Println(err)
+			c.String(http.StatusInternalServerError, "%s", err)
 
-		// TODO: SETUP PUB SUB
+			return
+		}
+		_, err = subTopic.Subscribe()
+		if err != nil {
+			logger.Println(err)
+			c.String(http.StatusInternalServerError, "%s", err)
+
+			return
+		}
+
+		c.JSON(http.StatusOK, posts)
 	})
 
 	r.POST("/post/create", func(c *gin.Context) {
@@ -160,6 +170,8 @@ func main() {
 		return
 	}
 }
+
+
 
 type PostRequest struct {
 	Text string `json:"text" binding:"required"`
