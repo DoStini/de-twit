@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"context"
+	"fmt"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -34,11 +35,12 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, user string) 
 		}
 
 		if err := host.Connect(ctx, currPeer); err != nil {
-			return nil, err
+			fmt.Println(err)
+			continue
 		}
 		stream, err := host.NewStream(ctx, currPeer.ID, "/p2p/1.0.0")
 		if err != nil {
-			return nil, err
+			continue
 		}
 
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
