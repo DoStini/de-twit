@@ -16,15 +16,17 @@ func main() {
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	flag.Parse()
 
-	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-bootstrap-%d.log", *port), os.O_CREATE | os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-bootstrap-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	logger = log.New(logFile, fmt.Sprintf("bootstrap:%d  |  ", *port), log.Ltime | log.Lshortfile)
+	logger = log.New(logFile, fmt.Sprintf("bootstrap:%d  |  ", *port), log.Ltime|log.Lshortfile)
 
 	defer logFile.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, "logger", logger)
+
 	defer cancel()
 
 	f, err := os.OpenFile(*bootstrap, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
@@ -65,9 +67,9 @@ func main() {
 
 	for {
 		select {
-			case <- ticker.C:
-				logger.Println("ROUTING TABLE:")
-				kad.RoutingTable().Print()
+		case <-ticker.C:
+			logger.Println("ROUTING TABLE:")
+			kad.RoutingTable().Print()
 		}
 	}
 }

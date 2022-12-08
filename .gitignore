@@ -3,3 +3,5 @@ node
 bootstraps/*.txt
 storage/*/*
 logs/*.log
+*logs/*.log
+*.idea

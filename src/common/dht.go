@@ -29,9 +29,11 @@ func (nv NullValidator) Select(key string, values [][]byte) (int, error) {
 }
 
 func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host) {
+	logger := ctx.Value("logger").(*log.Logger)
+
 	var bootstrapNodeInfos []peer.AddrInfo
 
-	h := createNode(port)
+	h := createNode(ctx, port)
 
 	opts := []dht.Option{
 		dht.Mode(dht.ModeServer),
@@ -42,12 +44,12 @@ func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ip
 	for _, node := range bootstrapNodes {
 		addr, err := multiaddr.NewMultiaddr(node)
 		if err != nil {
-			log.Println(err.Error())
+			logger.Println(err.Error())
 			continue
 		}
 		peerInfo, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
-			log.Println(err.Error())
+			logger.Println(err.Error())
 			continue
 		}
 
@@ -58,12 +60,12 @@ func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ip
 	kad, err := dht.New(ctx, h, opts...)
 
 	if err != nil {
-		log.Println("Err on creating dht")
-		log.Fatalf(err.Error())
+		logger.Println("Err on creating dht")
+		logger.Fatalf(err.Error())
 	}
 	err = kad.Bootstrap(ctx)
 	if err != nil {
-		log.Fatalf(err.Error())
+		logger.Fatalf(err.Error())
 	}
 
 	var wg sync.WaitGroup
@@ -76,9 +78,9 @@ func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ip
 			err = h.Connect(ctx, nodeInfo)
 
 			if err != nil {
-				log.Println(err.Error())
+				logger.Println(err.Error())
 			} else {
-				log.Println("Connected to node ", nodeInfo)
+				logger.Println("Connected to node ", nodeInfo)
 			}
 		}()
 	}
