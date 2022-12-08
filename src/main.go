@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/libp2p/go-libp2p/core/network"
 	"log"
 	"net/http"
 	"os"
@@ -74,6 +75,22 @@ func main() {
 		return
 	}
 
+	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
+		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+		_, err = rw.WriteString(fmt.Sprintf("resp from %d\n", *port))
+		if err != nil {
+			logger.Fatalf(err.Error())
+			return
+		}
+
+		err = rw.Flush()
+		if err != nil {
+			logger.Fatalf(err.Error())
+			return
+		}
+	})
+
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
 		kad.RoutingTable().Print()
@@ -84,7 +101,17 @@ func main() {
 	r.POST("/:user/subscribe", func(c *gin.Context) {
 		user := c.Param("user")
 
-		service.Follow(ctx, kad, user)
+		posts, err := service.Follow(ctx, host, kad, user)
+
+		if err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		c.JSON(http.StatusOK, posts)
+
+		// TODO: SETUP PUB SUB
+
 	})
 
 	err = r.Run(fmt.Sprintf(":%d", *servePort))
