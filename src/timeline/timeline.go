@@ -13,11 +13,11 @@ import (
 	pb "src/timelinepb"
 )
 
-type timelinePB = pb.Timeline
+type PB = pb.Timeline
 
 type Timeline struct {
-	timelinePB
-	path string
+	PB
+	Path string
 }
 
 type OwnTimeline struct {
@@ -36,33 +36,27 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 		return nil, err
 	}
 
-	readTimeline, err := ReadTimelinePb(timelineBytes)
+	storedTimeline := new(OwnTimeline)
+
+	err = ReadTimelinePb(timelineBytes, &storedTimeline.PB)
 	if err != nil {
 		return nil, err
 	}
 
-	storedTimeline := new(OwnTimeline)
-	storedTimeline.timelinePB = *readTimeline
 	storedTimeline.topic = topic
-	storedTimeline.path = path
+	storedTimeline.Path = path
 
 	return storedTimeline, nil
 }
 
-func ReadTimelinePb(timelineBytes []byte) (*timelinePB, error) {
-	readTimeline := new(timelinePB)
-	err := proto.Unmarshal(timelineBytes, readTimeline)
+func ReadTimelinePb(timelineBytes []byte, buffer *PB) error {
+	err := proto.Unmarshal(timelineBytes, buffer)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return readTimeline, nil
+	return nil
 }
-
-//
-//func ReadTimelineFromFile(storagePath string) (*Timeline, error) {
-//
-//}
 
 func CreateTimeline(storagePath string, path string, topic *pubsub.Topic) *OwnTimeline {
 	err := os.MkdirAll(storagePath, os.ModePerm)
@@ -78,7 +72,7 @@ func CreateTimeline(storagePath string, path string, topic *pubsub.Topic) *OwnTi
 	// TODO: GET TIMELINE FROM SUBSCRIBERS
 	storedTimeline := new(OwnTimeline)
 	storedTimeline.Posts = []*pb.Post{}
-	storedTimeline.path = path
+	storedTimeline.Path = path
 	storedTimeline.topic = topic
 
 	out, err := proto.Marshal(&storedTimeline.Timeline)
@@ -98,6 +92,49 @@ func CreateTimeline(storagePath string, path string, topic *pubsub.Topic) *OwnTi
 	return storedTimeline
 }
 
+func (t *Timeline) Write() error {
+	timelineFile, err := os.OpenFile(t.Path, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	defer func(timelineFile *os.File) {
+		err := timelineFile.Close()
+		if err != nil {
+
+		}
+	}(timelineFile)
+
+	out, err := proto.Marshal(t)
+	if err != nil {
+		return err
+	}
+
+	_, err = timelineFile.Write(out)
+	return err
+}
+
+func (t *Timeline) addPost(post *pb.Post) error {
+	t.Posts = append(t.Posts, post)
+
+	out, err := proto.Marshal(t)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(t.Path, out, 0644)
+}
+
+func (t *Timeline) AddPost(text string) error {
+	post := pb.Post{
+		Text:        text,
+		Id:          fmt.Sprintf("%d", len(t.Posts)),
+		LastUpdated: timestamppb.Now(),
+	}
+
+	return t.addPost(&post)
+}
+
 func (t *OwnTimeline) AddPost(text string) {
 	post := pb.Post{
 		Text:        text,
@@ -105,15 +142,9 @@ func (t *OwnTimeline) AddPost(text string) {
 		LastUpdated: timestamppb.Now(),
 	}
 
-	t.Posts = append(t.Posts, &post)
+	err := t.Timeline.addPost(&post)
 
-	out, err := proto.Marshal(&t.Timeline)
-	if err != nil {
-		log.Fatalln("Failed to encode post:", err)
-	}
-	if err := os.WriteFile(t.path, out, 0644); err != nil {
-		log.Fatalln("Failed to write storage:", err)
-	}
+	out, err := proto.Marshal(&post)
 
 	err = t.topic.Publish(context.Background(), out)
 	if err != nil {

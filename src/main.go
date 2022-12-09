@@ -60,8 +60,6 @@ func main() {
 		bootstrapNodes = append(bootstrapNodes, s)
 	}
 
-	var followingCids []cid.Cid
-
 	err = f.Close()
 	if err != nil {
 		logger.Fatalf(err.Error())
@@ -107,6 +105,11 @@ func main() {
 		return
 	}
 
+	timelines := make(map[cid.Cid]*timeline.Timeline)
+	var followingCids []cid.Cid
+
+	timelines[nodeCid] = &storedTimeline.Timeline
+
 	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
@@ -127,7 +130,7 @@ func main() {
 		var reply []byte
 
 		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
-			reply, err = proto.Marshal(&storedTimeline.Timeline)
+			reply, err = proto.Marshal(timelines[requestedCid])
 			if err != nil {
 				logger.Println("Failed to encode post:", err)
 				return
@@ -160,14 +163,37 @@ func main() {
 	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		receivedTimeline, targetCid, err := service.Follow(ctx, host, kad, followingCids, user)
+		targetCid, err := common.GenerateCid(ctx, user)
+
+		if targetCid == nodeCid {
+			c.String(http.StatusUnprocessableEntity, "Can't follow own profile")
+			return
+		}
+
+		if common.Contains(followingCids, targetCid) {
+			c.String(http.StatusUnprocessableEntity, "Already following")
+			return
+		}
+
+		receivedTimeline, err := service.Follow(ctx, targetCid, host, kad)
 
 		if err != nil {
+			logger.Println(err.Error())
 			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		followingCids = append(followingCids, *targetCid)
+		receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", targetCid.String()))
+		err = receivedTimeline.Write()
+
+		if err != nil {
+			logger.Println(err.Error())
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		followingCids = append(followingCids, targetCid)
+		timelines[targetCid] = receivedTimeline
 
 		var posts []string
 		for _, post := range receivedTimeline.Posts {
@@ -182,12 +208,18 @@ func main() {
 	r.POST("/:user/unfollow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		err := service.Unfollow(ctx, &followingCids, user)
+		targetCid, err := common.GenerateCid(ctx, user)
 
+		newCids, newTimelines, err := service.Unfollow(targetCid, followingCids, timelines)
 		if err != nil {
 			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
+
+		followingCids = newCids
+		timelines = newTimelines
+
+		// TODO: REMOVE FILE
 
 		c.String(http.StatusOK, "ok")
 

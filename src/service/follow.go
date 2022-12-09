@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"context"
+	"errors"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -13,24 +14,19 @@ import (
 	timeline "src/timeline"
 )
 
-func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids []cid.Cid, user string) (*timeline.OwnTimeline, *cid.Cid, error) {
+func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timeline.Timeline, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var peers []peer.AddrInfo
 
-	c, err := common.GenerateCid(ctx, user)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	peerChan := kad.FindProvidersAsync(ctx, c, 5)
+	peerChan := kad.FindProvidersAsync(ctx, targetCid, 5)
 	for p := range peerChan {
 		peers = append(peers, p)
 	}
 
 	var peerResps []string
 
-	var receivedTimelines []*timeline.OwnTimeline
+	var receivedTimelines []*timeline.Timeline
 
 	for _, currPeer := range peers {
 		if currPeer.ID == host.ID() {
@@ -49,26 +45,26 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids
 
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-		_, err = rw.Write(append(c.Bytes(), 0))
+		_, err = rw.Write(append(targetCid.Bytes(), 0))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		err = rw.Flush()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		resp, err := rw.ReadBytes(0)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		resp = resp[:len(resp)-1]
 
-		var t timeline.OwnTimeline
+		var t timeline.Timeline
 
-		err = proto.Unmarshal(resp, &t.Timeline)
+		err = proto.Unmarshal(resp, &t)
 		if err != nil {
 			logger.Println(err.Error())
 			peerResps = append(peerResps, string(resp))
@@ -79,23 +75,23 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids
 		receivedTimelines = append(receivedTimelines, &t)
 	}
 
-	err = kad.Provide(ctx, c, true)
+	err := kad.Provide(ctx, targetCid, true)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return receivedTimelines[0], &c, nil
+	return receivedTimelines[0], nil
 }
 
-func Unfollow(ctx context.Context, followingCids *[]cid.Cid, user string) error {
+func Unfollow(targetCid cid.Cid, followingCids []cid.Cid, timelines map[cid.Cid]*timeline.Timeline) ([]cid.Cid, map[cid.Cid]*timeline.Timeline, error) {
+	index := common.FindIndex(followingCids, targetCid)
 
-	c, err := common.GenerateCid(ctx, user)
-	if err != nil {
-		return err
+	if index == -1 {
+		return nil, nil, errors.New("target timeline not found")
 	}
 
-	index := common.FindIndex(*followingCids, c)
-	*followingCids = common.RemoveIndex(*followingCids, index)
+	delete(timelines, targetCid)
+	followingCids = common.RemoveIndex(followingCids, index)
 
-	return nil
+	return followingCids, timelines, nil
 }
