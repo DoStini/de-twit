@@ -184,7 +184,7 @@ func main() {
 		}
 
 		receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", targetCid.String()))
-		err = receivedTimeline.Write()
+		err = receivedTimeline.WriteFile()
 
 		if err != nil {
 			logger.Println(err.Error())
@@ -195,7 +195,7 @@ func main() {
 		followingCids = append(followingCids, targetCid)
 		timelines[targetCid] = receivedTimeline
 
-		var posts []string
+		posts := make([]string, 0)
 		for _, post := range receivedTimeline.Posts {
 			posts = append(posts, fmt.Sprintf("%s: %s", post.GetLastUpdated().String(), post.GetText()))
 		}
@@ -210,18 +210,26 @@ func main() {
 
 		targetCid, err := common.GenerateCid(ctx, user)
 
-		newCids, newTimelines, err := service.Unfollow(targetCid, followingCids, timelines)
+		targetIndex := common.FindIndex(followingCids, targetCid)
+
+		if targetIndex == -1 {
+			c.String(http.StatusUnprocessableEntity, "Not following")
+			return
+		}
+
+		targetTimeline := timelines[targetCid]
+
+		delete(timelines, targetCid)
+		followingCids = common.RemoveIndex(followingCids, targetIndex)
+
+		err = targetTimeline.DeleteFile()
 		if err != nil {
+			logger.Println(err.Error())
 			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		followingCids = newCids
-		timelines = newTimelines
-
-		// TODO: REMOVE FILE
-
-		c.String(http.StatusOK, "ok")
+		c.String(http.StatusOK, "")
 
 		// TODO: DISCONNECT PUB SUB
 	})

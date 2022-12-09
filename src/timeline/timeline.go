@@ -92,7 +92,11 @@ func CreateTimeline(storagePath string, path string, topic *pubsub.Topic) *OwnTi
 	return storedTimeline
 }
 
-func (t *Timeline) Write() error {
+func (t *Timeline) DeleteFile() error {
+	return os.Remove(t.Path)
+}
+
+func (t *Timeline) WriteFile() error {
 	timelineFile, err := os.OpenFile(t.Path, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err

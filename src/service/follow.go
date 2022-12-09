@@ -10,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"log"
-	"src/common"
 	timeline "src/timeline"
 )
 
@@ -70,28 +69,20 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 			peerResps = append(peerResps, string(resp))
 		} else {
 			peerResps = append(peerResps, t.String())
+			receivedTimelines = append(receivedTimelines, &t)
 		}
-
-		receivedTimelines = append(receivedTimelines, &t)
 	}
+
+	logger.Println(peerResps)
 
 	err := kad.Provide(ctx, targetCid, true)
 	if err != nil {
 		return nil, err
 	}
 
-	return receivedTimelines[0], nil
-}
-
-func Unfollow(targetCid cid.Cid, followingCids []cid.Cid, timelines map[cid.Cid]*timeline.Timeline) ([]cid.Cid, map[cid.Cid]*timeline.Timeline, error) {
-	index := common.FindIndex(followingCids, targetCid)
-
-	if index == -1 {
-		return nil, nil, errors.New("target timeline not found")
+	if len(receivedTimelines) == 0 {
+		return nil, errors.New("user not found")
 	}
 
-	delete(timelines, targetCid)
-	followingCids = common.RemoveIndex(followingCids, index)
-
-	return followingCids, timelines, nil
+	return receivedTimelines[0], nil
 }
