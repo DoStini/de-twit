@@ -128,7 +128,10 @@ func main() {
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
-		err = postUpdater.ListenOnTopic(user)
+		err = postUpdater.ListenOnTopic(user, func(postUpdate *postupdater.PostUpdate) {
+			logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
+			logger.Println(postUpdate.Post.Text)
+		})
 		if err != nil {
 			logger.Println(err)
 			c.String(http.StatusInternalServerError, "%s", err)

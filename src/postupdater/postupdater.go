@@ -15,20 +15,25 @@ import (
 
 const UpdateBufferSize = 128
 
-type postUpdate struct {
-	post *pb.Post
-	user string
+type PostUpdate struct {
+	Post *pb.Post
+	User string
+}
+
+type Subscription struct {
+	sub     *pubsub.Subscription
+	handler func(*PostUpdate)
 }
 
 type subscriptionMap struct {
 	sync.RWMutex
-	m map[string]*pubsub.Subscription
+	m map[string]*Subscription
 }
 
 type PostUpdater struct {
 	PubS          *pubsub.PubSub
 	UserTopic     *pubsub.Topic
-	updateChan    chan *postUpdate
+	updateChan    chan *PostUpdate
 	subscriptions subscriptionMap
 	self          peer.ID
 	ctx           context.Context
@@ -36,17 +41,14 @@ type PostUpdater struct {
 
 // this is just to make handling post updates run sequentially
 func (psu *PostUpdater) handleEvents() {
-	var logger *log.Logger
-	logger = psu.ctx.Value("logger").(*log.Logger)
-	if logger == nil {
-		logger = log.New(os.Stdin, "listen: ", log.Ltime|log.Lshortfile)
-	}
-
 	for {
 		select {
 		case postUpdate := <-psu.updateChan:
-			logger.Printf("Wake up, new post from %s just dropped!", postUpdate.user)
-			logger.Println(postUpdate.post.Text)
+			psu.subscriptions.RLock()
+			subscription := psu.subscriptions.m[postUpdate.User]
+			psu.subscriptions.RUnlock()
+
+			subscription.handler(postUpdate)
 		}
 	}
 }
@@ -60,14 +62,14 @@ func (psu *PostUpdater) StopListeningTopic(topic string) {
 		return
 	}
 
-	subscription.Cancel()
+	subscription.sub.Cancel()
 
 	psu.subscriptions.Lock()
 	delete(psu.subscriptions.m, "topic")
 	psu.subscriptions.Unlock()
 }
 
-func (psu *PostUpdater) ListenOnTopic(topic string) error {
+func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*PostUpdate)) error {
 	subTopic, err := psu.PubS.Join(fmt.Sprintf("%s", topic))
 	if err != nil {
 		return err
@@ -78,7 +80,10 @@ func (psu *PostUpdater) ListenOnTopic(topic string) error {
 	}
 
 	psu.subscriptions.Lock()
-	psu.subscriptions.m[topic] = subscription
+	psu.subscriptions.m[topic] = &Subscription{
+		sub:     subscription,
+		handler: handler,
+	}
 	psu.subscriptions.Unlock()
 
 	go psu.listenOnTopic(subscription)
@@ -111,7 +116,7 @@ func (psu *PostUpdater) listenOnTopic(subscription *pubsub.Subscription) {
 		}
 
 		// send valid messages onto the Messages channel
-		psu.updateChan <- &postUpdate{post: post, user: subscription.Topic()}
+		psu.updateChan <- &PostUpdate{Post: post, User: subscription.Topic()}
 	}
 }
 
@@ -129,8 +134,8 @@ func NewPostUpdater(ctx context.Context, h host.Host, username string) (*PostUpd
 	psu := &PostUpdater{
 		PubS:          ps,
 		UserTopic:     ut,
-		updateChan:    make(chan *postUpdate, UpdateBufferSize),
-		subscriptions: subscriptionMap{m: make(map[string]*pubsub.Subscription)},
+		updateChan:    make(chan *PostUpdate, UpdateBufferSize),
+		subscriptions: subscriptionMap{m: make(map[string]*Subscription)},
 		self:          h.ID(),
 		ctx:           ctx,
 	}

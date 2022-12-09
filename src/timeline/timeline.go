@@ -31,13 +31,13 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 			log.Fatalln("Error creating folders: ", err)
 		}
 
-		timelineFile, err := os.OpenFile(path, os.O_CREATE | os.O_WRONLY, 0644)
+		timelineFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatalln("Error creating storage file: ", err)
 		}
 
 		// TODO: GET TIMELINE FROM SUBSCRIBERS, AND TIMELINE OF SUBSCRIBED
-		storedTimeline = Timeline{Timeline: pb.Timeline{Posts: []*pb.Post{} }}
+		storedTimeline = Timeline{Timeline: pb.Timeline{Posts: []*pb.Post{}}}
 		out, err := proto.Marshal(&storedTimeline.Timeline)
 		if err != nil {
 			log.Fatalln("Error marshalling storage: ", err)
@@ -69,7 +69,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) *Timeline {
 
 type Timeline struct {
 	pb.Timeline
-	path string
+	path  string
 	topic *pubsub.Topic
 }
 
@@ -82,14 +82,18 @@ func (t *Timeline) AddPost(text string) {
 
 	t.Posts = append(t.Posts, &post)
 
-	out, err := proto.Marshal(&post)
+	out, err := proto.Marshal(t)
 	if err != nil {
-		log.Fatalln("Failed to encode post:", err)
+		log.Fatalln("Failed to encode timeline:", err)
 	}
 	if err := os.WriteFile(t.path, out, 0644); err != nil {
 		log.Fatalln("Failed to write storage:", err)
 	}
 
+	out, err = proto.Marshal(&post)
+	if err != nil {
+		log.Fatalln("Failed to encode post:", err)
+	}
 	err = t.topic.Publish(context.Background(), out)
 	if err != nil {
 		log.Println("Failed to publish: ", err)
