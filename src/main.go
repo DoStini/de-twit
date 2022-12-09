@@ -17,6 +17,7 @@ import (
 	"src/common"
 	"src/service"
 	"src/timeline"
+	"sync"
 )
 
 func main() {
@@ -111,6 +112,9 @@ func main() {
 		return
 	}
 
+	timelinesLock := sync.RWMutex{}
+	followingCidsLock := sync.RWMutex{}
+
 	for _, followingCid := range followingCids {
 		err := kad.Provide(ctx, followingCid, true)
 		if err != nil {
@@ -140,16 +144,22 @@ func main() {
 
 		var reply []byte
 
+		followingCidsLock.RLock()
 		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
+			timelinesLock.Lock()
 			reply, err = proto.Marshal(timelines[requestedCid])
+			timelinesLock.Unlock()
 			if err != nil {
 				logger.Println("Failed to encode post:", err)
+				followingCidsLock.RUnlock()
 				return
 			}
 		} else {
 			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
 			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", *port))
 		}
+
+		followingCidsLock.RUnlock()
 
 		_, err = rw.Write(append(reply, 0))
 		if err != nil {
@@ -203,8 +213,14 @@ func main() {
 			return
 		}
 
+		followingCidsLock.Lock()
+		timelinesLock.Lock()
+
 		followingCids = append(followingCids, targetCid)
 		timelines[targetCid] = receivedTimeline
+
+		followingCidsLock.Unlock()
+		timelinesLock.Unlock()
 
 		posts := make([]string, 0)
 		for _, post := range receivedTimeline.Posts {
@@ -228,10 +244,14 @@ func main() {
 			return
 		}
 
+		timelinesLock.Lock()
+
 		targetTimeline := timelines[targetCid]
 
 		delete(timelines, targetCid)
 		followingCids = common.RemoveIndex(followingCids, targetIndex)
+
+		timelinesLock.Unlock()
 
 		err = targetTimeline.DeleteFile()
 		if err != nil {
