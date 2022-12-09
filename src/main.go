@@ -91,7 +91,7 @@ func main() {
 		}
 	})
 
-	pubSubUpdate, err := subscription.MakePubSub(&ctx, &host, *username)
+	pubSubUpdate, err := subscription.MakePubSub(ctx, host, *username)
 	if err != nil {
 		logger.Fatalln(err)
 	}
@@ -127,15 +127,8 @@ func main() {
 			return
 		}
 
-		// after follow, peers should be connected, so they belong on the same pub sub network
-		subTopic, err := pubSubUpdate.PubS.Join(fmt.Sprintf("%s", user))
-		if err != nil {
-			logger.Println(err)
-			c.String(http.StatusInternalServerError, "%s", err)
-
-			return
-		}
-		_, err = subTopic.Subscribe()
+		// after follow, peers should be connected, so they belong on the same pub subnetwork
+		err = pubSubUpdate.ListenOnTopic(user)
 		if err != nil {
 			logger.Println(err)
 			c.String(http.StatusInternalServerError, "%s", err)
