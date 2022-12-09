@@ -1,4 +1,4 @@
-package subscription
+package postupdater
 
 import (
 	"context"
@@ -25,17 +25,17 @@ type subscriptionMap struct {
 	m map[string]*pubsub.Subscription
 }
 
-type PubSubUpdate struct {
-	PubS *pubsub.PubSub
-	UserTopic *pubsub.Topic
-	updateChan chan *postUpdate
+type PostUpdater struct {
+	PubS          *pubsub.PubSub
+	UserTopic     *pubsub.Topic
+	updateChan    chan *postUpdate
 	subscriptions subscriptionMap
-	self peer.ID
-	ctx context.Context
+	self          peer.ID
+	ctx           context.Context
 }
 
 // this is just to make handling post updates run sequentially
-func (psu *PubSubUpdate) handleEvents() {
+func (psu *PostUpdater) handleEvents() {
 	var logger *log.Logger
 	logger = psu.ctx.Value("logger").(*log.Logger)
 	if logger == nil {
@@ -44,14 +44,14 @@ func (psu *PubSubUpdate) handleEvents() {
 
 	for {
 		select {
-		case postUpdate := <- psu.updateChan:
+		case postUpdate := <-psu.updateChan:
 			logger.Printf("Wake up, new post from %s just dropped!", postUpdate.user)
 			logger.Println(postUpdate.post.Text)
 		}
 	}
 }
 
-func (psu *PubSubUpdate) StopListeningTopic(topic string) {
+func (psu *PostUpdater) StopListeningTopic(topic string) {
 	psu.subscriptions.RLock()
 	subscription := psu.subscriptions.m[topic]
 	psu.subscriptions.RUnlock()
@@ -61,9 +61,13 @@ func (psu *PubSubUpdate) StopListeningTopic(topic string) {
 	}
 
 	subscription.Cancel()
+
+	psu.subscriptions.Lock()
+	delete(psu.subscriptions.m, "topic")
+	psu.subscriptions.Unlock()
 }
 
-func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
+func (psu *PostUpdater) ListenOnTopic(topic string) error {
 	subTopic, err := psu.PubS.Join(fmt.Sprintf("%s", topic))
 	if err != nil {
 		return err
@@ -81,7 +85,7 @@ func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
 	return nil
 }
 
-func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription) {
+func (psu *PostUpdater) listenOnTopic(subscription *pubsub.Subscription) {
 	var logger *log.Logger
 	logger = psu.ctx.Value("logger").(*log.Logger)
 	if logger == nil {
@@ -89,30 +93,29 @@ func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription) {
 	}
 
 	for {
-			message, err := subscription.Next(psu.ctx)
-			if err != nil {
-				logger.Println("My darling, I have died and gone to heaven.")
-				logger.Println(err)
-				return
-			}
-			// only forward messages delivered by others
-			if message.ReceivedFrom == psu.self {
-				continue
-			}
+		message, err := subscription.Next(psu.ctx)
+		if err != nil {
+			logger.Println(err)
+			return
+		}
+		// only forward messages delivered by others
+		if message.ReceivedFrom == psu.self {
+			continue
+		}
 
-			post := new(pb.Post)
-			err = proto.Unmarshal(message.Data, post)
-			if err != nil {
-				logger.Println(err)
-				continue
-			}
+		post := new(pb.Post)
+		err = proto.Unmarshal(message.Data, post)
+		if err != nil {
+			logger.Println(err)
+			continue
+		}
 
-			// send valid messages onto the Messages channel
-			psu.updateChan <- &postUpdate{post: post, user: subscription.Topic()}
+		// send valid messages onto the Messages channel
+		psu.updateChan <- &postUpdate{post: post, user: subscription.Topic()}
 	}
 }
 
-func MakePubSub(ctx context.Context, h host.Host, username string) (*PubSubUpdate, error) {
+func NewPostUpdater(ctx context.Context, h host.Host, username string) (*PostUpdater, error) {
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
 		return nil, err
@@ -123,13 +126,13 @@ func MakePubSub(ctx context.Context, h host.Host, username string) (*PubSubUpdat
 		return nil, err
 	}
 
-	psu := &PubSubUpdate{
-		PubS: ps,
-		UserTopic: ut,
-		updateChan: make(chan *postUpdate, UpdateBufferSize),
+	psu := &PostUpdater{
+		PubS:          ps,
+		UserTopic:     ut,
+		updateChan:    make(chan *postUpdate, UpdateBufferSize),
 		subscriptions: subscriptionMap{m: make(map[string]*pubsub.Subscription)},
-		self: h.ID(),
-		ctx: ctx,
+		self:          h.ID(),
+		ctx:           ctx,
 	}
 
 	go psu.handleEvents()

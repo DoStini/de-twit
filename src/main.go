@@ -12,8 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"src/common"
+	"src/postupdater"
 	"src/service"
-	"src/subscription"
 	"src/timeline"
 )
 
@@ -91,12 +91,12 @@ func main() {
 		}
 	})
 
-	pubSubUpdate, err := subscription.MakePubSub(ctx, host, *username)
+	postUpdater, err := postupdater.NewPostUpdater(ctx, host, *username)
 	if err != nil {
 		logger.Fatalln(err)
 	}
 
-	storedTimeline := timeline.CreateOrReadTimeline(*storage, pubSubUpdate.UserTopic)
+	storedTimeline := timeline.CreateOrReadTimeline(*storage, postUpdater.UserTopic)
 
 	c, err := common.GenerateCid(ctx, *username)
 	if err != nil {
@@ -128,7 +128,7 @@ func main() {
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
-		err = pubSubUpdate.ListenOnTopic(user)
+		err = postUpdater.ListenOnTopic(user)
 		if err != nil {
 			logger.Println(err)
 			c.String(http.StatusInternalServerError, "%s", err)
@@ -141,7 +141,7 @@ func main() {
 
 	r.POST("/:user/unfollow", func(c *gin.Context) {
 		user := c.Param("user")
-		pubSubUpdate.StopListeningTopic(user)
+		postUpdater.StopListeningTopic(user)
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
@@ -170,8 +170,6 @@ func main() {
 		return
 	}
 }
-
-
 
 type PostRequest struct {
 	Text string `json:"text" binding:"required"`
