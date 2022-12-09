@@ -65,7 +65,7 @@ func (psu *PostUpdater) StopListeningTopic(topic string) {
 	subscription.sub.Cancel()
 
 	psu.subscriptions.Lock()
-	delete(psu.subscriptions.m, "topic")
+	delete(psu.subscriptions.m, topic)
 	psu.subscriptions.Unlock()
 }
 
