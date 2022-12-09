@@ -57,7 +57,7 @@ func (x *Timeline) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Timeline.ProtoReflect.Descriptor instead.
+// Deprecated: Use OwnTimeline.ProtoReflect.Descriptor instead.
 func (*Timeline) Descriptor() ([]byte, []int) {
 	return file_protobuf_timeline_proto_rawDescGZIP(), []int{0}
 }
@@ -167,12 +167,12 @@ func file_protobuf_timeline_proto_rawDescGZIP() []byte {
 
 var file_protobuf_timeline_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_protobuf_timeline_proto_goTypes = []interface{}{
-	(*Timeline)(nil),              // 0: timelinepb.Timeline
+	(*Timeline)(nil),              // 0: timelinepb.OwnTimeline
 	(*Post)(nil),                  // 1: timelinepb.Post
 	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_protobuf_timeline_proto_depIdxs = []int32{
-	1, // 0: timelinepb.Timeline.posts:type_name -> timelinepb.Post
+	1, // 0: timelinepb.OwnTimeline.posts:type_name -> timelinepb.Post
 	2, // 1: timelinepb.Post.last_updated:type_name -> google.protobuf.Timestamp
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type

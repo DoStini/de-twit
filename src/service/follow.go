@@ -13,14 +13,14 @@ import (
 	timeline "src/timeline"
 )
 
-func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids *[]cid.Cid, user string) ([]string, error) {
+func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids []cid.Cid, user string) (*timeline.OwnTimeline, *cid.Cid, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var peers []peer.AddrInfo
 
 	c, err := common.GenerateCid(ctx, user)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	peerChan := kad.FindProvidersAsync(ctx, c, 5)
@@ -29,6 +29,8 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids
 	}
 
 	var peerResps []string
+
+	var receivedTimelines []*timeline.OwnTimeline
 
 	for _, currPeer := range peers {
 		if currPeer.ID == host.ID() {
@@ -49,41 +51,40 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, followingCids
 
 		_, err = rw.Write(append(c.Bytes(), 0))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		err = rw.Flush()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		resp, err := rw.ReadBytes(0)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		resp = resp[:len(resp)-1]
 
-		var t timeline.Timeline
+		var t timeline.OwnTimeline
 
 		err = proto.Unmarshal(resp, &t.Timeline)
-
 		if err != nil {
 			logger.Println(err.Error())
 			peerResps = append(peerResps, string(resp))
 		} else {
 			peerResps = append(peerResps, t.String())
 		}
+
+		receivedTimelines = append(receivedTimelines, &t)
 	}
 
 	err = kad.Provide(ctx, c, true)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	*followingCids = append(*followingCids, c)
-
-	return peerResps, nil
+	return receivedTimelines[0], &c, nil
 }
 
 func Unfollow(ctx context.Context, followingCids *[]cid.Cid, user string) error {

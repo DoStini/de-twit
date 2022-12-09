@@ -85,10 +85,15 @@ func main() {
 	}
 	topic, err := ps.Join(*username)
 	if err != nil {
+		logger.Fatalf(err.Error())
 		return
 	}
 
-	storedTimeline := timeline.CreateOrReadTimeline(*storage, topic)
+	storedTimeline, err := timeline.CreateOrReadTimeline(*storage, topic)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
 
 	nodeCid, err := common.GenerateCid(ctx, *username)
 	if err != nil {
@@ -124,7 +129,7 @@ func main() {
 		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
 			reply, err = proto.Marshal(&storedTimeline.Timeline)
 			if err != nil {
-				log.Println("Failed to encode post:", err)
+				logger.Println("Failed to encode post:", err)
 				return
 			}
 		} else {
@@ -155,11 +160,18 @@ func main() {
 	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		posts, err := service.Follow(ctx, host, kad, &followingCids, user)
+		receivedTimeline, targetCid, err := service.Follow(ctx, host, kad, followingCids, user)
 
 		if err != nil {
 			c.String(http.StatusInternalServerError, err.Error())
 			return
+		}
+
+		followingCids = append(followingCids, *targetCid)
+
+		var posts []string
+		for _, post := range receivedTimeline.Posts {
+			posts = append(posts, fmt.Sprintf("%s: %s", post.GetLastUpdated().String(), post.GetText()))
 		}
 
 		c.JSON(http.StatusOK, posts)
@@ -192,7 +204,7 @@ func main() {
 
 		storedTimeline.AddPost(json.Text)
 
-		logger.Println("Current Timeline: ")
+		logger.Println("Current OwnTimeline: ")
 
 		for _, post := range storedTimeline.Posts {
 			logger.Println(post.Text)
