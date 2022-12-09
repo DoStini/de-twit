@@ -21,6 +21,7 @@ type PostUpdate struct {
 
 type Subscription struct {
 	sub     *pubsub.Subscription
+	topic   *pubsub.Topic
 	handler func(*PostUpdate)
 }
 
@@ -52,20 +53,26 @@ func (psu *PostUpdater) handleEvents() {
 	}
 }
 
-func (psu *PostUpdater) StopListeningTopic(topic string) {
+func (psu *PostUpdater) StopListeningTopic(topic string) error {
 	psu.subscriptions.RLock()
 	subscription := psu.subscriptions.m[topic]
 	psu.subscriptions.RUnlock()
 
 	if subscription == nil {
-		return
+		return nil
 	}
 
 	subscription.sub.Cancel()
+	err := subscription.topic.Close()
+	if err != nil {
+		return err
+	}
 
 	psu.subscriptions.Lock()
 	delete(psu.subscriptions.m, topic)
 	psu.subscriptions.Unlock()
+
+	return nil
 }
 
 func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*PostUpdate)) error {
@@ -81,6 +88,7 @@ func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*PostUpdate)) e
 	psu.subscriptions.Lock()
 	psu.subscriptions.m[topic] = &Subscription{
 		sub:     subscription,
+		topic:   subTopic,
 		handler: handler,
 	}
 	psu.subscriptions.Unlock()

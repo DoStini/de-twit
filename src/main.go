@@ -144,7 +144,11 @@ func main() {
 
 	r.POST("/:user/unfollow", func(c *gin.Context) {
 		user := c.Param("user")
-		postUpdater.StopListeningTopic(user)
+		err := postUpdater.StopListeningTopic(user)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
