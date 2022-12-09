@@ -1,0 +1,3 @@
+#!bash
+
+rm logs/*.log
