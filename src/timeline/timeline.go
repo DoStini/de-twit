@@ -82,7 +82,7 @@ func (t *Timeline) AddPost(text string) {
 
 	t.Posts = append(t.Posts, &post)
 
-	out, err := proto.Marshal(&t.Timeline)
+	out, err := proto.Marshal(&post)
 	if err != nil {
 		log.Fatalln("Failed to encode post:", err)
 	}

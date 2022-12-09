@@ -15,6 +15,11 @@ import (
 
 const UpdateBufferSize = 128
 
+type postUpdate struct {
+	post *pb.Post
+	user string
+}
+
 type subscriptionMap struct {
 	sync.RWMutex
 	m map[string]chan struct{}
@@ -23,14 +28,27 @@ type subscriptionMap struct {
 type PubSubUpdate struct {
 	PubS *pubsub.PubSub
 	UserTopic *pubsub.Topic
-	updateChan chan *pb.Post
+	updateChan chan *postUpdate
 	subscriptions subscriptionMap
 	self peer.ID
 	ctx context.Context
 }
 
+// this is just to make handling post updates run sequentially
 func (psu *PubSubUpdate) handleEvents() {
+	var logger *log.Logger
+	logger = psu.ctx.Value("logger").(*log.Logger)
+	if logger == nil {
+		logger = log.New(os.Stdin, "listen: ", log.Ltime|log.Lshortfile)
+	}
 
+	for {
+		select {
+		case postUpdate := <- psu.updateChan:
+			logger.Printf("Wake up, new post from %s just dropped!", postUpdate.user)
+			logger.Println(postUpdate.post.Text)
+		}
+	}
 }
 
 func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
@@ -50,7 +68,6 @@ func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
 	psu.subscriptions.Unlock()
 
 	go psu.listenOnTopic(subscription, cancelChannel)
-
 	return nil
 }
 
@@ -82,10 +99,9 @@ func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription, cancel
 				logger.Println(err)
 				continue
 			}
-			logger.Println(post.Text)
 
 			// send valid messages onto the Messages channel
-			psu.updateChan <- post
+			psu.updateChan <- &postUpdate{post: post, user: subscription.Topic()}
 		}
 	}
 }
@@ -101,12 +117,15 @@ func MakePubSub(ctx context.Context, h host.Host, username string) (*PubSubUpdat
 		return nil, err
 	}
 
-	return &PubSubUpdate{
+	psu := &PubSubUpdate{
 		PubS: ps,
 		UserTopic: ut,
-		updateChan: make(chan *pb.Post, UpdateBufferSize),
+		updateChan: make(chan *postUpdate, UpdateBufferSize),
 		subscriptions: subscriptionMap{m: make(map[string]chan struct{})},
 		self: h.ID(),
 		ctx: ctx,
-	}, nil
+	}
+
+	go psu.handleEvents()
+	return psu, nil
 }
