@@ -138,6 +138,13 @@ func NewPostUpdater(ctx context.Context, h host.Host, username string) (*PostUpd
 		return nil, err
 	}
 
+	// Apparently, if node does not subscribe, other peers don't know that it is in network, haven't noticed it
+	// but will do it just to be sure
+	_, err = ut.Subscribe()
+	if err != nil {
+		return nil, err
+	}
+
 	psu := &PostUpdater{
 		PubS:          ps,
 		UserTopic:     ut,
