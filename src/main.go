@@ -105,8 +105,19 @@ func main() {
 		return
 	}
 
-	timelines := make(map[cid.Cid]*timeline.Timeline)
-	var followingCids []cid.Cid
+	timelines, followingCids, err := timeline.ReadFollowingTimelines(ctx, *storage)
+	if err != nil {
+		logger.Fatalf(err.Error())
+		return
+	}
+
+	for _, followingCid := range followingCids {
+		err := kad.Provide(ctx, followingCid, true)
+		if err != nil {
+			logger.Fatalf(err.Error())
+			return
+		}
+	}
 
 	timelines[nodeCid] = &storedTimeline.Timeline
 
@@ -183,7 +194,7 @@ func main() {
 			return
 		}
 
-		receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", targetCid.String()))
+		receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", user))
 		err = receivedTimeline.WriteFile()
 
 		if err != nil {

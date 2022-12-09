@@ -73,7 +73,7 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 		}
 	}
 
-	logger.Println(peerResps)
+	logger.Println("Responses: ", peerResps)
 
 	err := kad.Provide(ctx, targetCid, true)
 	if err != nil {

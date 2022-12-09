@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ipfs/go-cid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"src/common"
 	pb "src/timelinepb"
+	"strings"
 )
 
 type PB = pb.Timeline
@@ -47,6 +51,59 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 	storedTimeline.Path = path
 
 	return storedTimeline, nil
+}
+
+func ReadFollowingTimelines(ctx context.Context, storagePath string) (map[cid.Cid]*Timeline, []cid.Cid, error) {
+	timelines := make(map[cid.Cid]*Timeline)
+	storedCids := make([]cid.Cid, 0)
+
+	err := filepath.Walk(storagePath, func(path string, info fs.FileInfo, err error) error {
+		if info.Name() == "storage" {
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		parts := strings.Split(info.Name(), "-")
+
+		if len(parts) != 2 {
+			return nil
+		}
+
+		fileCid, err := common.GenerateCid(ctx, parts[1])
+		if err != nil {
+			return err
+		}
+
+		storedCids = append(storedCids, fileCid)
+		storedTimeline := Timeline{Path: path}
+
+		err = ReadTimelinePbFromFile(path, &storedTimeline.PB)
+		if err != nil {
+			return err
+		}
+
+		timelines[fileCid] = &storedTimeline
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return timelines, storedCids, nil
+}
+
+func ReadTimelinePbFromFile(path string, buffer *PB) error {
+	timelineBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	return ReadTimelinePb(timelineBytes, buffer)
 }
 
 func ReadTimelinePb(timelineBytes []byte, buffer *PB) error {
