@@ -22,7 +22,7 @@ type postUpdate struct {
 
 type subscriptionMap struct {
 	sync.RWMutex
-	m map[string]chan struct{}
+	m map[string]*pubsub.Subscription
 }
 
 type PubSubUpdate struct {
@@ -51,6 +51,18 @@ func (psu *PubSubUpdate) handleEvents() {
 	}
 }
 
+func (psu *PubSubUpdate) StopListeningTopic(topic string) {
+	psu.subscriptions.RLock()
+	subscription := psu.subscriptions.m[topic]
+	psu.subscriptions.RUnlock()
+
+	if subscription == nil {
+		return
+	}
+
+	subscription.Cancel()
+}
+
 func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
 	subTopic, err := psu.PubS.Join(fmt.Sprintf("%s", topic))
 	if err != nil {
@@ -61,17 +73,15 @@ func (psu *PubSubUpdate) ListenOnTopic(topic string) error {
 		return err
 	}
 
-	cancelChannel := make(chan struct{})
-
 	psu.subscriptions.Lock()
-	psu.subscriptions.m[topic] = cancelChannel
+	psu.subscriptions.m[topic] = subscription
 	psu.subscriptions.Unlock()
 
-	go psu.listenOnTopic(subscription, cancelChannel)
+	go psu.listenOnTopic(subscription)
 	return nil
 }
 
-func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription, cancelChannel chan struct{}) {
+func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription) {
 	var logger *log.Logger
 	logger = psu.ctx.Value("logger").(*log.Logger)
 	if logger == nil {
@@ -79,12 +89,9 @@ func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription, cancel
 	}
 
 	for {
-		select {
-		case <- cancelChannel:
-			return
-		default:
 			message, err := subscription.Next(psu.ctx)
 			if err != nil {
+				logger.Println("My darling, I have died and gone to heaven.")
 				logger.Println(err)
 				return
 			}
@@ -102,7 +109,6 @@ func (psu *PubSubUpdate) listenOnTopic(subscription *pubsub.Subscription, cancel
 
 			// send valid messages onto the Messages channel
 			psu.updateChan <- &postUpdate{post: post, user: subscription.Topic()}
-		}
 	}
 }
 
@@ -121,7 +127,7 @@ func MakePubSub(ctx context.Context, h host.Host, username string) (*PubSubUpdat
 		PubS: ps,
 		UserTopic: ut,
 		updateChan: make(chan *postUpdate, UpdateBufferSize),
-		subscriptions: subscriptionMap{m: make(map[string]chan struct{})},
+		subscriptions: subscriptionMap{m: make(map[string]*pubsub.Subscription)},
 		self: h.ID(),
 		ctx: ctx,
 	}

@@ -139,6 +139,13 @@ func main() {
 		c.JSON(http.StatusOK, posts)
 	})
 
+	r.POST("/:user/unfollow", func(c *gin.Context) {
+		user := c.Param("user")
+		pubSubUpdate.StopListeningTopic(user)
+
+		c.JSON(http.StatusOK, gin.H{})
+	})
+
 	r.POST("/post/create", func(c *gin.Context) {
 		var json PostRequest
 
