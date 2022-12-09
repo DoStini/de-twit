@@ -2,7 +2,6 @@ package postupdater
 
 import (
 	"context"
-	"fmt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -70,7 +69,7 @@ func (psu *PostUpdater) StopListeningTopic(topic string) {
 }
 
 func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*PostUpdate)) error {
-	subTopic, err := psu.PubS.Join(fmt.Sprintf("%s", topic))
+	subTopic, err := psu.PubS.Join(topic)
 	if err != nil {
 		return err
 	}
