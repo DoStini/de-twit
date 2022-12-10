@@ -1,9 +1,22 @@
 <script lang="ts">
     import Post from "./Post.svelte";
     import type PostData from "../../types/PostData.js";
+    import NewPostsBadge from "./NewPostsBadge.svelte";
+    import {refreshTimeline} from "../../actions/posts.js";
 
     export let posts: [PostData];
+    export let newPosts: [PostData];
+
+    const refreshPosts = () => {
+        refreshTimeline()
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
 </script>
+
+{ #if newPosts.length > 0}
+    <NewPostsBadge action={refreshPosts} newPostsCount={newPosts.length} />
+{/if}
 
 { #if posts.length === 0 }
     <div class="flex items-center justify-center m-5">
