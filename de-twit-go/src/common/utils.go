@@ -6,7 +6,18 @@ import (
 	"github.com/multiformats/go-multicodec"
 	"github.com/multiformats/go-multihash"
 	"log"
+	"os"
 )
+
+func GetLogger(ctx context.Context) *log.Logger {
+	var logger *log.Logger
+	logger = ctx.Value("logger").(*log.Logger)
+	if logger == nil {
+		logger = log.New(os.Stdin, "", log.Ltime|log.Lshortfile)
+	}
+
+	return logger
+}
 
 func GenerateCid(ctx context.Context, key string) (cid.Cid, error) {
 	logger := ctx.Value("logger").(*log.Logger)

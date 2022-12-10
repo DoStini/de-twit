@@ -5,15 +5,12 @@ import (
 	"de-twit-go/src/common"
 	"de-twit-go/src/postupdater"
 	"de-twit-go/src/timeline"
-	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 )
 
@@ -21,33 +18,33 @@ type postRequest struct {
 	Text string `json:"text" binding:"required"`
 }
 
-func StartHTTP(
-	ctx context.Context,
-	kad *dht.IpfsDHT,
-	nodeCid cid.Cid,
-	storedTimeline *timeline.OwnTimeline,
-	followingTimelines *timeline.FollowingTimelines,
-	postUpdater *postupdater.PostUpdater,
-	storage string, username string, serverPort int64,
-) error {
-	var logger *log.Logger
-	logger = ctx.Value("logger").(*log.Logger)
-	if logger == nil {
-		logger = log.New(os.Stdin, "listen: ", log.Ltime|log.Lshortfile)
-	}
+type HTTPServer struct {
+	*gin.Engine
+	ctx context.Context
+}
 
-	host := kad.Host()
-	r := gin.Default()
+func (r *HTTPServer) RegisterGetRouting(kad *dht.IpfsDHT) {
 	r.GET("/routing/info", func(c *gin.Context) {
 		kad.RoutingTable().Print()
 
 		c.String(http.StatusOK, "ok")
 	})
+}
+
+func (r *HTTPServer) RegisterPostFollow(
+	nodeCid cid.Cid,
+	storage string,
+	kad *dht.IpfsDHT,
+	followingTimelines *timeline.FollowingTimelines,
+	postUpdater *postupdater.PostUpdater,
+) {
+	logger := common.GetLogger(r.ctx)
+	host := kad.Host()
 
 	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		targetCid, err := common.GenerateCid(ctx, user)
+		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Can't generate content id for username")
 			return
@@ -67,7 +64,7 @@ func StartHTTP(
 				return nil, errors.New("already following")
 			}
 
-			receivedTimeline, err := Follow(ctx, targetCid, host, kad)
+			receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
 
 			if err != nil {
 				logger.Println(err.Error())
@@ -94,36 +91,7 @@ func StartHTTP(
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
-		err = postUpdater.ListenOnTopic(user, func(postUpdate *pb.Post) {
-			logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
-			logger.Println(postUpdate.Text)
-
-			targetCid, err := common.GenerateCid(ctx, postUpdate.User)
-			if err != nil {
-				logger.Printf("Couldn't process message: %s\n", err)
-				return
-			}
-
-			err = func() error {
-				followingTimelines.RLock()
-				defer followingTimelines.RUnlock()
-
-				if !common.Contains(followingTimelines.FollowingCids, targetCid) {
-					return errors.New("not following")
-				}
-				targetTimeline := followingTimelines.Timelines[targetCid]
-				err := targetTimeline.AddPost(postUpdate.Id, postUpdate.Text, postUpdate.User, postUpdate.LastUpdated)
-				if err != nil {
-					return err
-				}
-
-				return nil
-			}()
-			if err != nil {
-				logger.Printf("Couldn't process message: %s\n", err)
-				return
-			}
-		})
+		err = postUpdater.ListenOnFollowingTopic(user, followingTimelines)
 		if err != nil {
 			logger.Println(err)
 			c.String(http.StatusInternalServerError, "%s", err)
@@ -137,11 +105,18 @@ func StartHTTP(
 
 		c.JSON(http.StatusOK, posts)
 	})
+}
+
+func (r *HTTPServer) RegisterPostUnfollow(
+	followingTimelines *timeline.FollowingTimelines,
+	postUpdater *postupdater.PostUpdater,
+) {
+	logger := common.GetLogger(r.ctx)
 
 	r.POST("/:user/unfollow", func(c *gin.Context) {
 		user := c.Param("user")
 
-		targetCid, err := common.GenerateCid(ctx, user)
+		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Can't generate content id for username")
 			return
@@ -179,8 +154,11 @@ func StartHTTP(
 		}()
 
 		c.String(http.StatusOK, "")
-		// TODO: DISCONNECT PUB SUB
 	})
+}
+
+func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timeline.OwnTimeline) {
+	logger := common.GetLogger(r.ctx)
 
 	r.POST("/post/create", func(c *gin.Context) {
 		var json postRequest
@@ -206,6 +184,13 @@ func StartHTTP(
 			logger.Printf("Posted at %s", post.LastUpdated.String())
 		}
 	})
+}
 
-	return r.Run(fmt.Sprintf(":%d", serverPort))
+func NewHTTP(
+	ctx context.Context,
+) *HTTPServer {
+	return &HTTPServer{
+		Engine: gin.Default(),
+		ctx:    ctx,
+	}
 }

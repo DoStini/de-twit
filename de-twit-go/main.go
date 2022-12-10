@@ -137,9 +137,14 @@ func main() {
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
-	err = service.StartHTTP(ctx, kad, nodeCid, storedTimeline, followingTimelines, postUpdater, inputCommands.storage, inputCommands.username, inputCommands.serverPort)
+	r := service.NewHTTP(ctx)
+	r.RegisterGetRouting(kad)
+	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
+	r.RegisterPostUnfollow(followingTimelines, postUpdater)
+	r.RegisterPostCreate(inputCommands.username, storedTimeline)
+
+	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {
-		logger.Fatalf(err.Error())
-		return
+		logger.Fatalln(err)
 	}
 }
