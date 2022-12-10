@@ -7,9 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/core/network"
-	"google.golang.org/protobuf/proto"
 	"log"
 	"net/http"
 	"os"
@@ -19,7 +16,6 @@ import (
 	"src/service"
 	"src/timeline"
 	pb "src/timelinepb"
-	"sync"
 )
 
 type InputCommands struct {
@@ -126,17 +122,14 @@ func main() {
 		return
 	}
 
-	timelines, followingCids, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
+	followingTimelines, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
 	}
 
-	followingCidsLock := sync.RWMutex{}
-	ownTimelineLock := sync.RWMutex{}
-
 	// TODO: MOVE TO GOROUTINE
-	for _, followingCid := range followingCids {
+	for _, followingCid := range followingTimelines.FollowingCids {
 		err := kad.Provide(ctx, followingCid, true)
 		if err != nil {
 			logger.Fatalf(err.Error())
@@ -144,53 +137,9 @@ func main() {
 		}
 	}
 
-	timelines[nodeCid] = &storedTimeline.Timeline
+	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
-	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-		resp, err := rw.ReadBytes(0)
-		if err != nil {
-			logger.Println(err.Error())
-		}
-
-		cidResp := resp[:len(resp)-1]
-
-		requestedCid, err := cid.Cast(cidResp)
-		if err != nil {
-			logger.Println(err.Error())
-			stream.Close()
-			return
-		}
-
-		var reply []byte
-
-		followingCidsLock.RLock()
-		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
-			reply, err = proto.Marshal(timelines[requestedCid])
-			if err != nil {
-				logger.Println("Failed to encode post:", err)
-				followingCidsLock.RUnlock()
-				return
-			}
-		} else {
-			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
-			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", inputCommands.port))
-		}
-		followingCidsLock.RUnlock()
-
-		_, err = rw.Write(append(reply, 0))
-		if err != nil {
-			logger.Println(err.Error())
-			return
-		}
-
-		err = rw.Flush()
-		if err != nil {
-			logger.Println(err.Error())
-			return
-		}
-	})
+	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
 
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
@@ -214,10 +163,10 @@ func main() {
 		}
 
 		receivedTimeline, err := func() (*timeline.Timeline, error) {
-			followingCidsLock.Lock()
-			defer followingCidsLock.Unlock()
+			followingTimelines.Lock()
+			defer followingTimelines.Unlock()
 
-			if common.Contains(followingCids, targetCid) {
+			if common.Contains(followingTimelines.FollowingCids, targetCid) {
 				c.String(http.StatusUnprocessableEntity, "Already following")
 				return nil, errors.New("already following")
 			}
@@ -239,8 +188,8 @@ func main() {
 				return nil, err
 			}
 
-			followingCids = append(followingCids, targetCid)
-			timelines[targetCid] = receivedTimeline
+			followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, targetCid)
+			followingTimelines.Timelines[targetCid] = receivedTimeline
 
 			return receivedTimeline, nil
 		}()
@@ -260,13 +209,13 @@ func main() {
 			}
 
 			err = func() error {
-				followingCidsLock.RLock()
-				defer followingCidsLock.RUnlock()
+				followingTimelines.RLock()
+				defer followingTimelines.RUnlock()
 
-				if !common.Contains(followingCids, targetCid) {
+				if !common.Contains(followingTimelines.FollowingCids, targetCid) {
 					return errors.New("not following")
 				}
-				targetTimeline := timelines[targetCid]
+				targetTimeline := followingTimelines.Timelines[targetCid]
 				err := targetTimeline.AddPost(postUpdate.Id, postUpdate.Text, postUpdate.User, postUpdate.LastUpdated)
 				if err != nil {
 					return err
@@ -303,10 +252,10 @@ func main() {
 		}
 
 		err = func() error {
-			followingCidsLock.Lock()
-			defer followingCidsLock.Unlock()
+			followingTimelines.Lock()
+			defer followingTimelines.Unlock()
 
-			targetIndex := common.FindIndex(followingCids, targetCid)
+			targetIndex := common.FindIndex(followingTimelines.FollowingCids, targetCid)
 			if targetIndex == -1 {
 				c.String(http.StatusUnprocessableEntity, "Not following")
 				return errors.New("not following")
@@ -318,10 +267,10 @@ func main() {
 				return err
 			}
 
-			targetTimeline := timelines[targetCid]
+			targetTimeline := followingTimelines.Timelines[targetCid]
 
-			delete(timelines, targetCid)
-			followingCids = common.RemoveIndex(followingCids, targetIndex)
+			delete(followingTimelines.Timelines, targetCid)
+			followingTimelines.FollowingCids = common.RemoveIndex(followingTimelines.FollowingCids, targetIndex)
 
 			err = targetTimeline.DeleteFile()
 			if err != nil {
@@ -345,14 +294,14 @@ func main() {
 			return
 		}
 
-		ownTimelineLock.Lock()
+		storedTimeline.Lock()
 		err := storedTimeline.AddPost(json.Text, inputCommands.username)
 		if err != nil {
-			ownTimelineLock.Unlock()
+			storedTimeline.Unlock()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		ownTimelineLock.Unlock()
+		storedTimeline.Unlock()
 
 		logger.Println("Current OwnTimeline: ")
 
