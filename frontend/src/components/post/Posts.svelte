@@ -6,9 +6,11 @@
 </script>
 
 { #if posts.length === 0 }
-    <h4>
-        Nothing to show! Post something or find other users to follow
-    </h4>
+    <div class="flex items-center justify-center m-5">
+        <span class="text-xl">
+            Nothing to show! Post something or find other users to follow!
+        </span>
+    </div>
 {:else }
     <div class="grid grid-cols-8 gap-4 sm:m-20 m-5">
 
