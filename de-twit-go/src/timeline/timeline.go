@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 )
 
+var minPeers int32 = 5
+
 type PB = pb.Timeline
 
 type Timeline struct {
@@ -67,6 +69,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
 	// TODO: THIS CODE IS ALSO REPEATED IN SOME PLACES, A REFACTORING IS IN ORDER
+
 	var count atomic.Int32
 	logger := common.GetLogger(ctx)
 	ctx, cancel := context.WithCancel(ctx)
@@ -75,18 +78,16 @@ func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
 
 	for p := range peerChan {
-		if count.Load() >= 5 {
-			cancel()
-			break
-		}
-
-		if p.ID == kad.Host().ID() {
-			continue
-		}
-
 		wg.Add(1)
+		p := p
 		go func() {
 			defer wg.Done()
+
+			if count.Load() >= minPeers {
+				cancel()
+				return
+			}
+
 			if err := kad.Host().Connect(ctx, p); err != nil {
 				logger.Println(err.Error())
 				return
