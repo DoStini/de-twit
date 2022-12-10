@@ -7,7 +7,9 @@
     import {newPostsStore} from "../actions/posts";
     import {onMount} from "svelte";
     import {retrieveTimeline} from "../services/posts";
-    import ErrorAlert from "../components/alerts/ErrorAlert.svelte";
+    import NewPostModal from "../components/post/NewPostModal.svelte";
+    import {closeNewPostModal, openNewPostModal} from "../actions/newPostModal.js";
+    import {serializeForm} from "../utils/form.js";
 
     let posts: PostData[]
     postsStore.subscribe((value) => posts = value)
@@ -27,8 +29,9 @@
 
 <Posts posts={posts} newPosts={newPosts}/>
 
-<Fab action={() => addNewPost({
-    text: "Ola mundo",
-    username: "andremoreira9",
-    timestamp: new Date(Date.now())
-})}/>
+<Fab action={openNewPostModal}/>
+
+<NewPostModal submit={(data) => {
+    console.log(data)
+    closeNewPostModal()
+}}/>
