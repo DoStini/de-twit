@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ipfs/go-cid"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type PB = pb.Timeline
@@ -33,8 +35,9 @@ type OwnTimeline struct {
 
 type FollowingTimelines struct {
 	sync.RWMutex
-	Timelines     map[cid.Cid]*Timeline
-	FollowingCids []cid.Cid
+	Timelines      map[cid.Cid]*Timeline
+	FollowingCids  []cid.Cid
+	FollowingNames []string
 }
 
 func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline, error) {
@@ -61,10 +64,48 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 	return storedTimeline, nil
 }
 
+func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
+	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
+	// TODO: THIS CODE IS ALSO REPEATED IN SOME PLACES, A REFACTORING IS IN ORDER
+	var count atomic.Int32
+	logger := common.GetLogger(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
+
+	for p := range peerChan {
+		if count.Load() >= 5 {
+			cancel()
+			break
+		}
+
+		if p.ID == kad.Host().ID() {
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := kad.Host().Connect(ctx, p); err != nil {
+				logger.Println(err.Error())
+				return
+			}
+
+			count.Add(1)
+		}()
+	}
+	wg.Wait()
+	cancel()
+
+	logger.Printf("Connected to %d peers\n", count.Load())
+}
+
 func ReadFollowingTimelines(ctx context.Context, storagePath string) (*FollowingTimelines, error) {
 	followingTimelines := &FollowingTimelines{
-		Timelines:     make(map[cid.Cid]*Timeline),
-		FollowingCids: make([]cid.Cid, 0),
+		Timelines:      make(map[cid.Cid]*Timeline),
+		FollowingCids:  make([]cid.Cid, 0),
+		FollowingNames: make([]string, 0),
 	}
 
 	err := filepath.Walk(storagePath, func(path string, info fs.FileInfo, err error) error {
@@ -88,6 +129,7 @@ func ReadFollowingTimelines(ctx context.Context, storagePath string) (*Following
 		}
 
 		followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, fileCid)
+		followingTimelines.FollowingNames = append(followingTimelines.FollowingNames, parts[1])
 		storedTimeline := Timeline{Path: path}
 
 		err = ReadTimelinePbFromFile(path, &storedTimeline.PB)

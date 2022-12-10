@@ -125,9 +125,21 @@ func main() {
 		return
 	}
 
-	// TODO: MOVE TO GOROUTINE
-	for _, followingCid := range followingTimelines.FollowingCids {
-		err := kad.Provide(ctx, followingCid, true)
+	for idx, followingCid := range followingTimelines.FollowingCids {
+		// TODO: UPDATE TIMELINES, OR START GOROUTINE (not sure if needed) THAT DOES AS SUCH
+		// TODO: RIGHT NOW, ALL UPDATE TIMELINE DOES IS JUST CONNECT TO PEERS
+		// TODO: SO THAT PUB SUB IS RECONNECTED
+		timeline.UpdateTimeline(ctx, followingCid, kad)
+		// END: UPDATE TIMELINES
+
+		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines)
+		if err != nil {
+			logger.Println(err.Error())
+			continue
+		}
+
+		// TODO: MOVE TO GOROUTINE
+		err = kad.Provide(ctx, followingCid, true)
 		if err != nil {
 			logger.Fatalf(err.Error())
 			return
@@ -137,7 +149,10 @@ func main() {
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
-	r := service.NewHTTP(ctx)
+	r, err := service.NewHTTP(ctx)
+	if err != nil {
+		logger.Fatalln(err)
+	}
 	r.RegisterGetRouting(kad)
 	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
