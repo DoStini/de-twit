@@ -142,12 +142,15 @@ func DoWithProviders(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT, work fu
 
 	var wg sync.WaitGroup
 	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
+	guard := make(chan struct{}, minProviders)
 
 	for p := range peerChan {
 		wg.Add(1)
 		go func(info peer.AddrInfo) {
 			defer wg.Done()
 
+			guard <- struct{}{}
+			defer func() { <-guard }()
 			if count.Load() >= minProviders {
 				cancel()
 				return
