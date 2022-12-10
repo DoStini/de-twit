@@ -3,6 +3,7 @@ package timeline
 import (
 	"context"
 	"de-twit-go/src/common"
+	dht2 "de-twit-go/src/dht"
 	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
@@ -18,10 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 )
-
-var minPeers int32 = 5
 
 type PB = pb.Timeline
 
@@ -69,37 +67,9 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 
 func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
-	// TODO: THIS CODE IS ALSO REPEATED IN SOME PLACES, A REFACTORING IS IN ORDER
-
-	var count atomic.Int32
-	logger := common.GetLogger(ctx)
-	ctx, cancel := context.WithCancel(ctx)
-
-	var wg sync.WaitGroup
-	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
-
-	for p := range peerChan {
-		wg.Add(1)
-		go func(info peer.AddrInfo) {
-			defer wg.Done()
-
-			if count.Load() >= minPeers {
-				cancel()
-				return
-			}
-
-			if err := kad.Host().Connect(ctx, info); err != nil {
-				logger.Println(err.Error())
-				return
-			}
-
-			count.Add(1)
-		}(p)
-	}
-	wg.Wait()
-	cancel()
-
-	logger.Printf("Connected to %d peers\n", count.Load())
+	dht2.DoWithProviders(ctx, cid, kad, func(info peer.AddrInfo) error {
+		return nil
+	})
 }
 
 func ReadFollowingTimelines(ctx context.Context, storagePath string) (*FollowingTimelines, error) {

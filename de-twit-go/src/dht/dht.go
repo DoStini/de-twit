@@ -2,7 +2,9 @@ package dht
 
 import (
 	"context"
+	"de-twit-go/src/common"
 	"fmt"
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -13,7 +15,10 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 )
+
+var minProviders int32 = 5
 
 type NullValidator struct{}
 
@@ -128,4 +133,42 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 	wg.Wait()
 
 	return kad, h, nil
+}
+
+func DoWithProviders(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT, work func(peer.AddrInfo) error) {
+	var count atomic.Int32
+	logger := common.GetLogger(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
+
+	for p := range peerChan {
+		wg.Add(1)
+		go func(info peer.AddrInfo) {
+			defer wg.Done()
+
+			if count.Load() >= minProviders {
+				cancel()
+				return
+			}
+
+			if err := kad.Host().Connect(ctx, info); err != nil {
+				logger.Println(err.Error())
+				return
+			}
+
+			err := work(info)
+			if err != nil {
+				logger.Println(err.Error())
+				return
+			}
+
+			count.Add(1)
+		}(p)
+	}
+	wg.Wait()
+	cancel()
+
+	logger.Printf("Connected to %d peers\n", count.Load())
 }
