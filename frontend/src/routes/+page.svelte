@@ -1,16 +1,16 @@
 <script lang="ts">
     import "../app.postcss";
-    import Posts from "../components/post/Posts.svelte";
     import Fab from "../components/Fab.svelte";
-    import { addNewPost, postsStore } from "../actions/posts.js"
+    import { postsStore } from "../actions/posts.js"
     import type PostData from "../types/PostData.js";
     import {newPostsStore} from "../actions/posts";
     import {onMount} from "svelte";
     import {retrieveTimeline} from "../services/posts";
     import NewPostModal from "../components/post/NewPostModal.svelte";
     import {closeNewPostModal, openNewPostModal} from "../actions/newPostModal.js";
-    import {serializeForm} from "../utils/form.js";
     import {createPost} from "../services/posts.js";
+    import {env} from "$env/dynamic/public";
+    import Posts from "../components/post/Posts.svelte";
 
     let posts: PostData[]
     postsStore.subscribe((value) => posts = value)
@@ -24,7 +24,7 @@
         loading = true
         try {
             await createPost({
-                username: "andremoreira9",
+                username: env.PUBLIC_USERNAME,
                 text: data.content,
                 timestamp: new Date()
             });

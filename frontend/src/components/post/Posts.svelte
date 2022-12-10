@@ -3,6 +3,7 @@
     import type PostData from "../../types/PostData.js";
     import NewPostsBadge from "./NewPostsBadge.svelte";
     import {refreshTimeline} from "../../actions/posts.js";
+    import {env} from "$env/dynamic/public";
 
     export let posts: [PostData];
     export let newPosts: [PostData];
@@ -28,7 +29,7 @@
     <div class="grid grid-cols-8 gap-4 sm:m-20 m-5">
 
     {#each posts as post}
-        {@const isUser = post.username === "andremoreira9" }
+        {@const isUser = post.username === env.PUBLIC_USERNAME }
         <div class="{isUser ? 'card-show-user' : 'card-show-other'}">
             <Post post="{post}"></Post>
         </div>
