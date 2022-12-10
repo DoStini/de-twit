@@ -113,26 +113,13 @@ func main() {
 		return
 	}
 
-	err = kad.Provide(ctx, nodeCid, true)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
 	followingTimelines, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
 	}
 
-	// TODO: MOVE TO GOROUTINE
-	for _, followingCid := range followingTimelines.FollowingCids {
-		err := kad.Provide(ctx, followingCid, true)
-		if err != nil {
-			logger.Fatalf(err.Error())
-			return
-		}
-	}
+	dht.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
 
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 

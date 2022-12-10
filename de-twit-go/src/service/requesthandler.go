@@ -24,7 +24,7 @@ type HTTPServer struct {
 
 type errorResponse struct {
 	errorCode int
-	reason string
+	reason    string
 }
 
 func (e *errorResponse) Error() string {
@@ -55,12 +55,12 @@ func (r *HTTPServer) RegisterPostFollow(
 		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
 			logger.Println("PostFollow: Couldn't Generate content id: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error":"couldn't generate content id for username"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "couldn't generate content id for username"})
 			return
 		}
 
 		if targetCid == nodeCid {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error":"can't follow own profile"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "can't follow own profile"})
 			return
 		}
 
@@ -75,7 +75,7 @@ func (r *HTTPServer) RegisterPostFollow(
 			receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
 			if err != nil {
 				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
-				return nil,  &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
+				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
 			receivedTimeline.Path = filepath.Join(storage, fmt.Sprintf("storage-%s", user))
@@ -92,7 +92,7 @@ func (r *HTTPServer) RegisterPostFollow(
 			return receivedTimeline, nil
 		}()
 		if resErr != nil {
-			c.JSON(resErr.errorCode, gin.H{"error":resErr.reason})
+			c.JSON(resErr.errorCode, gin.H{"error": resErr.reason})
 			return
 		}
 
@@ -100,6 +100,13 @@ func (r *HTTPServer) RegisterPostFollow(
 		err = postUpdater.ListenOnFollowingTopic(user, followingTimelines)
 		if err != nil {
 			logger.Println("PostFollow: Couldn't Listen on topic", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		err = kad.Provide(r.ctx, targetCid, true)
+		if err != nil {
+			logger.Println("PostFollow: Couldn't Provide", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -125,7 +132,7 @@ func (r *HTTPServer) RegisterPostUnfollow(
 		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
 			logger.Println("PostFollow: Couldn't Generate content id: ", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error":"couldn't generate content id for username"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "couldn't generate content id for username"})
 			return
 		}
 
