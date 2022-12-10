@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"google.golang.org/protobuf/proto"
 	"log"
@@ -16,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"src/common"
+	"src/postupdater"
 	"src/service"
 	"src/timeline"
 	"sync"
@@ -26,7 +26,7 @@ func main() {
 	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	storage := flag.String("storage", "", "The directory where program files are stored")
-	username := flag.String("username", "", "The port of this host")
+	username := flag.String("username", "", "The username")
 	flag.Parse()
 
 	if *username == "" {
@@ -79,17 +79,12 @@ func main() {
 		}
 	}()
 
-	ps, err := pubsub.NewGossipSub(ctx, host)
+	postUpdater, err := postupdater.NewPostUpdater(ctx, host, *username)
 	if err != nil {
 		logger.Fatalln(err)
 	}
-	topic, err := ps.Join(*username)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
 
-	storedTimeline, err := timeline.CreateOrReadTimeline(*storage, topic)
+	storedTimeline, err := timeline.CreateOrReadTimeline(*storage, postUpdater.UserTopic)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
@@ -229,14 +224,49 @@ func main() {
 			return
 		}
 
+		// after follow, peers should be connected, so they belong on the same pub subnetwork
+		err = postUpdater.ListenOnTopic(user, func(postUpdate *postupdater.PostUpdate) {
+			logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
+			logger.Println(postUpdate.Post.Text)
+
+			targetCid, err := common.GenerateCid(ctx, postUpdate.User)
+			if err != nil {
+				logger.Printf("Couldn't process message: %s\n", err)
+				return
+			}
+
+			err = func() error {
+				followingCidsLock.RLock()
+				defer followingCidsLock.RUnlock()
+
+				if !common.Contains(followingCids, targetCid) {
+					return errors.New("not following")
+				}
+				targetTimeline := timelines[targetCid]
+				err := targetTimeline.AddPost(postUpdate.Post.Id, postUpdate.Post.Text, postUpdate.Post.LastUpdated)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+			if err != nil {
+				logger.Printf("Couldn't process message: %s\n", err)
+				return
+			}
+		})
+		if err != nil {
+			logger.Println(err)
+			c.String(http.StatusInternalServerError, "%s", err)
+			return
+		}
+
 		posts := make([]string, 0)
 		for _, post := range receivedTimeline.Posts {
 			posts = append(posts, fmt.Sprintf("%s: %s", post.GetLastUpdated().String(), post.GetText()))
 		}
 
 		c.JSON(http.StatusOK, posts)
-
-		// TODO: SETUP PUB SUB
 	})
 
 	r.POST("/:user/unfollow", func(c *gin.Context) {
@@ -253,10 +283,15 @@ func main() {
 			defer followingCidsLock.Unlock()
 
 			targetIndex := common.FindIndex(followingCids, targetCid)
-
 			if targetIndex == -1 {
 				c.String(http.StatusUnprocessableEntity, "Not following")
 				return errors.New("not following")
+			}
+
+			err := postUpdater.StopListeningTopic(user)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return err
 			}
 
 			targetTimeline := timelines[targetCid]

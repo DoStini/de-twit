@@ -107,6 +107,7 @@ func ReadTimelinePbFromFile(path string, buffer *PB) error {
 }
 
 func ReadTimelinePb(timelineBytes []byte, buffer *PB) error {
+	// TODO: POSSIBLY, MERGE SUBSCRIBED TIMELINES FROM OTHER SUBSCRIBERS
 	err := proto.Unmarshal(timelineBytes, buffer)
 	if err != nil {
 		return err
@@ -126,7 +127,7 @@ func CreateTimeline(storagePath string, path string, topic *pubsub.Topic) *OwnTi
 		log.Fatalln("Error creating storage file: ", err)
 	}
 
-	// TODO: GET TIMELINE FROM SUBSCRIBERS
+	// TODO: GET TIMELINE FROM SUBSCRIBERS, AND TIMELINE OF SUBSCRIBED
 	storedTimeline := new(OwnTimeline)
 	storedTimeline.Posts = []*pb.Post{}
 	storedTimeline.Path = path
@@ -186,11 +187,11 @@ func (t *Timeline) addPost(post *pb.Post) error {
 	return os.WriteFile(t.Path, out, 0644)
 }
 
-func (t *Timeline) AddPost(text string) error {
+func (t *Timeline) AddPost(id string, text string, lastUpdated *timestamppb.Timestamp) error {
 	post := pb.Post{
 		Text:        text,
-		Id:          fmt.Sprintf("%d", len(t.Posts)),
-		LastUpdated: timestamppb.Now(),
+		Id:          id,
+		LastUpdated: lastUpdated,
 	}
 
 	return t.addPost(&post)
@@ -213,6 +214,10 @@ func (t *OwnTimeline) AddPost(text string) error {
 		return err
 	}
 
+	out, err = proto.Marshal(&post)
+	if err != nil {
+		log.Fatalln("Failed to encode post:", err)
+	}
 	err = t.topic.Publish(context.Background(), out)
 	if err != nil {
 		return err
