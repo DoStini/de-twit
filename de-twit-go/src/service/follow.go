@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"context"
+	dht2 "de-twit-go/src/dht"
 	"de-twit-go/src/timeline"
 	"errors"
 	"github.com/ipfs/go-cid"
@@ -11,52 +12,37 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"log"
+	"sync"
 )
 
 func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timeline.Timeline, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
-	var peers []peer.AddrInfo
-
-	peerChan := kad.FindProvidersAsync(ctx, targetCid, 5)
-	for p := range peerChan {
-		peers = append(peers, p)
-	}
-
+	var timelineLock sync.RWMutex
+	var receivedTimelines []*timeline.Timeline
 	var peerResps []string
 
-	var receivedTimelines []*timeline.Timeline
-
-	for _, currPeer := range peers {
-		if currPeer.ID == host.ID() {
-			continue
-		}
-
-		if err := host.Connect(ctx, currPeer); err != nil {
-			logger.Println(err.Error())
-			continue
-		}
-		stream, err := host.NewStream(ctx, currPeer.ID, "/p2p/1.0.0")
+	dht2.DoWithProviders(ctx, targetCid, kad, func(info peer.AddrInfo) error {
+		stream, err := host.NewStream(ctx, info.ID, "/p2p/1.0.0")
 		if err != nil {
-			logger.Println(err.Error())
-			continue
+			return err
 		}
 
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
 		_, err = rw.Write(append(targetCid.Bytes(), 0))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		err = rw.Flush()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		resp, err := rw.ReadBytes(0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		resp = resp[:len(resp)-1]
@@ -66,12 +52,23 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 		err = proto.Unmarshal(resp, &t)
 		if err != nil {
 			logger.Println(err.Error())
+			timelineLock.Lock()
+
 			peerResps = append(peerResps, string(resp))
-		} else {
-			peerResps = append(peerResps, t.String())
-			receivedTimelines = append(receivedTimelines, &t)
+
+			timelineLock.Unlock()
+			return err
 		}
-	}
+
+		timelineLock.Lock()
+
+		peerResps = append(peerResps, t.String())
+		receivedTimelines = append(receivedTimelines, &t)
+
+		timelineLock.Unlock()
+
+		return nil
+	})
 
 	logger.Println("Responses: ", peerResps)
 
