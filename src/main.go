@@ -18,6 +18,7 @@ import (
 	"src/postupdater"
 	"src/service"
 	"src/timeline"
+	pb "src/timelinepb"
 	"sync"
 )
 
@@ -248,9 +249,9 @@ func main() {
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
-		err = postUpdater.ListenOnTopic(user, func(postUpdate *postupdater.PostUpdate) {
+		err = postUpdater.ListenOnTopic(user, func(postUpdate *pb.Post) {
 			logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
-			logger.Println(postUpdate.Post.Text)
+			logger.Println(postUpdate.Text)
 
 			targetCid, err := common.GenerateCid(ctx, postUpdate.User)
 			if err != nil {
@@ -266,7 +267,7 @@ func main() {
 					return errors.New("not following")
 				}
 				targetTimeline := timelines[targetCid]
-				err := targetTimeline.AddPost(postUpdate.Post.Id, postUpdate.Post.Text, postUpdate.Post.LastUpdated)
+				err := targetTimeline.AddPost(postUpdate.Id, postUpdate.Text, postUpdate.User, postUpdate.LastUpdated)
 				if err != nil {
 					return err
 				}
@@ -345,7 +346,7 @@ func main() {
 		}
 
 		ownTimelineLock.Lock()
-		err := storedTimeline.AddPost(json.Text)
+		err := storedTimeline.AddPost(json.Text, inputCommands.username)
 		if err != nil {
 			ownTimelineLock.Unlock()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

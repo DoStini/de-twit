@@ -14,15 +14,10 @@ import (
 
 const UpdateBufferSize = 128
 
-type PostUpdate struct {
-	Post *pb.Post
-	User string
-}
-
 type Subscription struct {
 	sub     *pubsub.Subscription
 	topic   *pubsub.Topic
-	handler func(*PostUpdate)
+	handler func(post *pb.Post)
 }
 
 type subscriptionMap struct {
@@ -33,7 +28,7 @@ type subscriptionMap struct {
 type PostUpdater struct {
 	PubS          *pubsub.PubSub
 	UserTopic     *pubsub.Topic
-	updateChan    chan *PostUpdate
+	updateChan    chan *pb.Post
 	subscriptions subscriptionMap
 	self          peer.ID
 	ctx           context.Context
@@ -75,7 +70,7 @@ func (psu *PostUpdater) StopListeningTopic(topic string) error {
 	return nil
 }
 
-func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*PostUpdate)) error {
+func (psu *PostUpdater) ListenOnTopic(topic string, handler func(*pb.Post)) error {
 	subTopic, err := psu.PubS.Join(topic)
 	if err != nil {
 		return err
@@ -123,7 +118,7 @@ func (psu *PostUpdater) listenOnTopic(subscription *pubsub.Subscription) {
 		}
 
 		// send valid messages onto the Messages channel
-		psu.updateChan <- &PostUpdate{Post: post, User: subscription.Topic()}
+		psu.updateChan <- post
 	}
 }
 
@@ -148,7 +143,7 @@ func NewPostUpdater(ctx context.Context, h host.Host, username string) (*PostUpd
 	psu := &PostUpdater{
 		PubS:          ps,
 		UserTopic:     ut,
-		updateChan:    make(chan *PostUpdate, UpdateBufferSize),
+		updateChan:    make(chan *pb.Post, UpdateBufferSize),
 		subscriptions: subscriptionMap{m: make(map[string]*Subscription)},
 		self:          h.ID(),
 		ctx:           ctx,
