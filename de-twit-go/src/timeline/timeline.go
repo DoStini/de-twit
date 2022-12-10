@@ -9,6 +9,7 @@ import (
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"io/fs"
@@ -79,8 +80,7 @@ func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 
 	for p := range peerChan {
 		wg.Add(1)
-		p := p
-		go func() {
+		go func(info peer.AddrInfo) {
 			defer wg.Done()
 
 			if count.Load() >= minPeers {
@@ -88,13 +88,13 @@ func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 				return
 			}
 
-			if err := kad.Host().Connect(ctx, p); err != nil {
+			if err := kad.Host().Connect(ctx, info); err != nil {
 				logger.Println(err.Error())
 				return
 			}
 
 			count.Add(1)
-		}()
+		}(p)
 	}
 	wg.Wait()
 	cancel()
