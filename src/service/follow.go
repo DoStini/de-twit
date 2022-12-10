@@ -4,16 +4,20 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"log"
+	"sort"
+	timeline "src/timeline"
+	"src/timelinepb"
+	pb "src/timelinepb"
+
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
-	"log"
-	timeline "src/timeline"
 )
 
-func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timeline.Timeline, error) {
+func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timelinepb.Timeline, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var peers []peer.AddrInfo
@@ -84,5 +88,41 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 		return nil, errors.New("user not found")
 	}
 
-	return receivedTimelines[0], nil
+	timeline := timelinepb.Timeline{Posts: make([]*timelinepb.Post, 0)}
+
+	mergeTimelines(&timeline, receivedTimelines)
+
+	return &timeline, nil
+}
+
+func mergeTimelines(t *pb.Timeline, timelines []*timeline.Timeline) error {
+	var posts []*pb.Post
+
+	t.Posts = make([]*pb.Post, 0)
+
+	for _, timeline := range timelines {
+		posts = append(posts, timeline.Posts...)
+	}
+
+	sort.SliceStable(posts, func(i, j int) bool {
+		return posts[i].LastUpdated.AsTime().Nanosecond() < posts[j].LastUpdated.AsTime().Nanosecond()
+	})
+
+	for _, post := range posts {
+		if containsPost(t.Posts, post) {
+			continue
+		}
+		t.Posts = append(t.Posts, post)
+	}
+
+	return nil
+}
+
+func containsPost(posts []*pb.Post, p *pb.Post) bool {
+	for _, post := range posts {
+		if post.Id == p.Id && post.User == p.User {
+			return true
+		}
+	}
+	return false
 }

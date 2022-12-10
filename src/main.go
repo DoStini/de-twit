@@ -6,10 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/core/network"
-	"google.golang.org/protobuf/proto"
 	"log"
 	"net/http"
 	"os"
@@ -20,14 +16,19 @@ import (
 	"src/timeline"
 	pb "src/timelinepb"
 	"sync"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p/core/network"
+	"google.golang.org/protobuf/proto"
 )
 
 type InputCommands struct {
-	port int64
+	port       int64
 	serverPort int64
-	bootstrap string
-	storage string
-	username string
+	bootstrap  string
+	storage    string
+	username   string
 }
 
 func parseCommands() InputCommands {
@@ -222,7 +223,7 @@ func main() {
 				return nil, errors.New("already following")
 			}
 
-			receivedTimeline, err := service.Follow(ctx, targetCid, host, kad)
+			receivedTimelinePB, err := service.Follow(ctx, targetCid, host, kad)
 
 			if err != nil {
 				logger.Println(err.Error())
@@ -230,7 +231,8 @@ func main() {
 				return nil, err
 			}
 
-			receivedTimeline.Path = filepath.Join(inputCommands.storage, fmt.Sprintf("storage-%s", user))
+			receivedTimeline := timeline.Timeline{PB: *receivedTimelinePB, Path: filepath.Join(inputCommands.storage, fmt.Sprintf("storage-%s", user))}
+
 			err = receivedTimeline.WriteFile()
 
 			if err != nil {
@@ -240,9 +242,9 @@ func main() {
 			}
 
 			followingCids = append(followingCids, targetCid)
-			timelines[targetCid] = receivedTimeline
+			timelines[targetCid] = &receivedTimeline
 
-			return receivedTimeline, nil
+			return &receivedTimeline, nil
 		}()
 		if err != nil {
 			return
