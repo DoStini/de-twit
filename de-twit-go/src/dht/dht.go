@@ -135,7 +135,7 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 	return kad, h, nil
 }
 
-func DoWithProviders(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT, work func(peer.AddrInfo) error) {
+func HandleWithProviders(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT, work func(peer.AddrInfo) error) {
 	var count atomic.Int32
 	logger := common.GetLogger(ctx)
 	ctx, cancel := context.WithCancel(ctx)

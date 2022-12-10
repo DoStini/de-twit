@@ -67,7 +67,7 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 
 func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
 	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
-	dht2.DoWithProviders(ctx, cid, kad, func(info peer.AddrInfo) error {
+	dht2.HandleWithProviders(ctx, cid, kad, func(info peer.AddrInfo) error {
 		return nil
 	})
 }

@@ -22,7 +22,7 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 	var receivedTimelines []*timeline.Timeline
 	var peerResps []string
 
-	dht2.DoWithProviders(ctx, targetCid, kad, func(info peer.AddrInfo) error {
+	dht2.HandleWithProviders(ctx, targetCid, kad, func(info peer.AddrInfo) error {
 		stream, err := host.NewStream(ctx, info.ID, "/p2p/1.0.0")
 		if err != nil {
 			return err
