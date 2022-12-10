@@ -3,30 +3,29 @@ package service
 import (
 	"bufio"
 	"context"
+	"errors"
+	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"google.golang.org/protobuf/proto"
 	"log"
-	"src/common"
+	timeline "src/timeline"
 )
 
-func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, user string) ([]string, error) {
+func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timeline.Timeline, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var peers []peer.AddrInfo
 
-	c, err := common.GenerateCid(ctx, user)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return nil, err
-	}
-
-	peerChan := kad.FindProvidersAsync(ctx, c, 5)
+	peerChan := kad.FindProvidersAsync(ctx, targetCid, 5)
 	for p := range peerChan {
 		peers = append(peers, p)
 	}
 
 	var peerResps []string
+
+	var receivedTimelines []*timeline.Timeline
 
 	for _, currPeer := range peers {
 		if currPeer.ID == host.ID() {
@@ -45,19 +44,45 @@ func Follow(ctx context.Context, host host.Host, kad *dht.IpfsDHT, user string) 
 
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-		resp, err := rw.ReadString('\n')
+		_, err = rw.Write(append(targetCid.Bytes(), 0))
 		if err != nil {
 			return nil, err
 		}
 
-		peerResps = append(peerResps, string(resp))
+		err = rw.Flush()
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := rw.ReadBytes(0)
+		if err != nil {
+			return nil, err
+		}
+
+		resp = resp[:len(resp)-1]
+
+		var t timeline.Timeline
+
+		err = proto.Unmarshal(resp, &t)
+		if err != nil {
+			logger.Println(err.Error())
+			peerResps = append(peerResps, string(resp))
+		} else {
+			peerResps = append(peerResps, t.String())
+			receivedTimelines = append(receivedTimelines, &t)
+		}
 	}
 
-	err = kad.Provide(ctx, c, true)
+	logger.Println("Responses: ", peerResps)
+
+	err := kad.Provide(ctx, targetCid, true)
 	if err != nil {
-		logger.Fatalf(err.Error())
 		return nil, err
 	}
 
-	return peerResps, nil
+	if len(receivedTimelines) == 0 {
+		return nil, errors.New("user not found")
+	}
+
+	return receivedTimelines[0], nil
 }
