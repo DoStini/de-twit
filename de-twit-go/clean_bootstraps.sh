@@ -1,3 +1,0 @@
-#!bash
-
-rm bootstraps/*.txt
