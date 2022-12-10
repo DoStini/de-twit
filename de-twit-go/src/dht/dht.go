@@ -2,9 +2,15 @@ package dht
 
 import (
 	"context"
+	"de-twit-go/src/common"
+	"de-twit-go/src/timeline"
 	"fmt"
+	"github.com/ipfs/go-cid"
+	"github.com/ipfs/go-datastore"
+	sync2 "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -13,7 +19,10 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"time"
 )
+
+var providerTTL = time.Hour
 
 type NullValidator struct{}
 
@@ -78,10 +87,23 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 
 	h := createNode(ctx, port)
 
+	providers.ProvideValidity = providerTTL
+	providerStore, err := providers.NewProviderManager(
+		ctx,
+		h.ID(),
+		h.Peerstore(),
+		sync2.MutexWrap(datastore.NewMapDatastore()),
+		providers.CleanupInterval(providerTTL/2),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	opts := []dht.Option{
 		dht.Mode(dht.ModeServer),
 		dht.Validator(NullValidator{}),
 		dht.ProtocolPrefix("/p2p"),
+		dht.ProviderStore(providerStore),
 	}
 
 	for _, node := range bootstrapNodes {
@@ -128,4 +150,40 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 	wg.Wait()
 
 	return kad, h, nil
+}
+
+func RegisterProvideRoutine(ctx context.Context, kad *dht.IpfsDHT, followingTimelines *timeline.FollowingTimelines, nodeCid cid.Cid) {
+	logger := common.GetLogger(ctx)
+
+	go func() {
+		ticker := time.NewTicker(providerTTL / 2)
+
+		// timer but first tick is instantaneous
+		for ; true; <-ticker.C {
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				err := kad.Provide(ctx, nodeCid, true)
+				if err != nil {
+					logger.Println(err.Error())
+				}
+			}()
+
+			followingTimelines.RLock()
+			for _, followingCid := range followingTimelines.FollowingCids {
+				wg.Add(1)
+				go func(followingCid cid.Cid) {
+					defer wg.Done()
+					err := kad.Provide(ctx, followingCid, true)
+					if err != nil {
+						logger.Println(err.Error())
+					}
+				}(followingCid)
+			}
+			followingTimelines.RUnlock()
+
+			wg.Wait()
+		}
+	}()
 }
