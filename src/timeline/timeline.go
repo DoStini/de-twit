@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"src/common"
 	pb "src/timelinepb"
 	"strings"
@@ -225,26 +224,6 @@ func (t *OwnTimeline) AddPost(text string, user string) error {
 	err = t.topic.Publish(context.Background(), out)
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (t *Timeline) MergeTimelines(timelines []*Timeline) error {
-	var posts []*pb.Post
-
-	t.PB.Posts = make([]*pb.Post, 0)
-
-	for _, timeline := range timelines {
-		posts = append(posts, timeline.Posts...)
-	}
-
-	sort.SliceStable(posts, func(i, j int) bool {
-		return posts[i].LastUpdated.AsTime().Nanosecond() < posts[j].LastUpdated.AsTime().Nanosecond()
-	})
-
-	for _, post := range posts {
-		t.PB.Posts = append(t.PB.Posts, post)
 	}
 
 	return nil
