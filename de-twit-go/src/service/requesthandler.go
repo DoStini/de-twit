@@ -148,6 +148,7 @@ func (r *HTTPServer) RegisterPostUnfollow(
 
 			delete(followingTimelines.Timelines, targetCid)
 			followingTimelines.FollowingCids = common.RemoveIndex(followingTimelines.FollowingCids, targetIndex)
+			followingTimelines.FollowingNames = common.RemoveIndex(followingTimelines.FollowingNames, targetIndex)
 
 			err = targetTimeline.DeleteFile()
 			if err != nil {

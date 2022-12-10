@@ -128,7 +128,7 @@ func main() {
 	for idx, followingCid := range followingTimelines.FollowingCids {
 		// TODO: UPDATE TIMELINES, OR START GOROUTINE (not sure if needed) THAT DOES AS SUCH
 		// TODO: RIGHT NOW, ALL UPDATE TIMELINE DOES IS JUST CONNECT TO PEERS
-		// TODO: SO THAT PUB SUB IS RECONNECTED
+		// TODO: SO THAT PUB SUB IS RECONNECTED, maybe call Follow()?
 		timeline.UpdateTimeline(ctx, followingCid, kad)
 		// END: UPDATE TIMELINES
 
