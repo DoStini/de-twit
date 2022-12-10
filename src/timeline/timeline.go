@@ -187,11 +187,11 @@ func (t *Timeline) addPost(post *pb.Post) error {
 	return os.WriteFile(t.Path, out, 0644)
 }
 
-func (t *Timeline) AddPost(text string) error {
+func (t *Timeline) AddPost(id string, text string, lastUpdated *timestamppb.Timestamp) error {
 	post := pb.Post{
 		Text:        text,
-		Id:          fmt.Sprintf("%d", len(t.Posts)),
-		LastUpdated: timestamppb.Now(),
+		Id:          id,
+		LastUpdated: lastUpdated,
 	}
 
 	return t.addPost(&post)

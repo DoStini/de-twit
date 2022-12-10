@@ -228,6 +228,32 @@ func main() {
 		err = postUpdater.ListenOnTopic(user, func(postUpdate *postupdater.PostUpdate) {
 			logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
 			logger.Println(postUpdate.Post.Text)
+
+			targetCid, err := common.GenerateCid(ctx, postUpdate.User)
+			if err != nil {
+				logger.Printf("Couldn't process message: %s\n", err)
+				return
+			}
+
+			err = func() error {
+				followingCidsLock.RLock()
+				defer followingCidsLock.RUnlock()
+
+				if !common.Contains(followingCids, targetCid) {
+					return errors.New("not following")
+				}
+				targetTimeline := timelines[targetCid]
+				err := targetTimeline.AddPost(postUpdate.Post.Id, postUpdate.Post.Text, postUpdate.Post.LastUpdated)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}()
+			if err != nil {
+				logger.Printf("Couldn't process message: %s\n", err)
+				return
+			}
 		})
 		if err != nil {
 			logger.Println(err)
@@ -257,7 +283,6 @@ func main() {
 			defer followingCidsLock.Unlock()
 
 			targetIndex := common.FindIndex(followingCids, targetCid)
-
 			if targetIndex == -1 {
 				c.String(http.StatusUnprocessableEntity, "Not following")
 				return errors.New("not following")
