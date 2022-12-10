@@ -160,10 +160,7 @@ func RegisterProvideRoutine(ctx context.Context, kad *dht.IpfsDHT, followingTime
 
 		// timer but first tick is instantaneous
 		for ; true; <-ticker.C {
-			var wg sync.WaitGroup
-			wg.Add(1)
 			go func() {
-				defer wg.Done()
 				err := kad.Provide(ctx, nodeCid, true)
 				if err != nil {
 					logger.Println(err.Error())
@@ -172,9 +169,7 @@ func RegisterProvideRoutine(ctx context.Context, kad *dht.IpfsDHT, followingTime
 
 			followingTimelines.RLock()
 			for _, followingCid := range followingTimelines.FollowingCids {
-				wg.Add(1)
 				go func(followingCid cid.Cid) {
-					defer wg.Done()
 					err := kad.Provide(ctx, followingCid, true)
 					if err != nil {
 						logger.Println(err.Error())
@@ -182,8 +177,6 @@ func RegisterProvideRoutine(ctx context.Context, kad *dht.IpfsDHT, followingTime
 				}(followingCid)
 			}
 			followingTimelines.RUnlock()
-
-			wg.Wait()
 		}
 	}()
 }
