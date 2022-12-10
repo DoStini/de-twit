@@ -1,146 +1,42 @@
-package main
+package service
 
 import (
-	"bufio"
 	"context"
+	"de-twit-go/src/common"
+	"de-twit-go/src/postupdater"
+	"de-twit-go/src/timeline"
+	pb "de-twit-go/src/timelinepb"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/ipfs/go-cid"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"src/common"
-	"src/postupdater"
-	"src/service"
-	"src/timeline"
-	pb "src/timelinepb"
 )
 
-type InputCommands struct {
-	port int64
-	serverPort int64
-	bootstrap string
-	storage string
-	username string
+type postRequest struct {
+	Text string `json:"text" binding:"required"`
 }
 
-func parseCommands() InputCommands {
-	port := flag.Int64("port", 4000, "The port of this host")
-	servePort := flag.Int64("serve", 5000, "The port used for http serving")
-	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
-	storage := flag.String("storage", "", "The directory where program files are stored")
-	username := flag.String("username", "", "The username")
-	flag.Parse()
-
-	if *username == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
-	if *storage == "" {
-		*storage = filepath.Join("storage", fmt.Sprintf("%s", *username))
-	}
-
-	return InputCommands{
-		port:       *port,
-		serverPort: *servePort,
-		bootstrap:  *bootstrap,
-		storage:    *storage,
-		username:   *username,
-	}
-}
-
-func main() {
-	inputCommands := parseCommands()
-
-	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%s.log", inputCommands.username), os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
-	logger = log.New(logFile, fmt.Sprintf("node:%s  |  ", inputCommands.username), log.Ltime|log.Lshortfile)
-
-	defer logFile.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, "logger", logger)
-
-	defer cancel()
-
-	f, err := os.OpenFile(inputCommands.bootstrap, os.O_RDONLY, 0644)
-	if err != nil {
-		logger.Fatalf(err.Error())
+func StartHTTP(
+	ctx context.Context,
+	kad *dht.IpfsDHT,
+	nodeCid cid.Cid,
+	storedTimeline *timeline.OwnTimeline,
+	followingTimelines *timeline.FollowingTimelines,
+	postUpdater *postupdater.PostUpdater,
+	storage string, username string, serverPort int64,
+) error {
+	var logger *log.Logger
+	logger = ctx.Value("logger").(*log.Logger)
+	if logger == nil {
+		logger = log.New(os.Stdin, "listen: ", log.Ltime|log.Lshortfile)
 	}
 
-	var bootstrapNodes []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		s := scanner.Text()
-		bootstrapNodes = append(bootstrapNodes, s)
-	}
-
-	err = f.Close()
-	if err != nil {
-		logger.Fatalf(err.Error())
-	}
-
-	kad, host, err := common.StartDHT(ctx, inputCommands.port, bootstrapNodes)
-	if err != nil {
-		logger.Fatalf("Error creating DHT: %s\n", err.Error())
-	}
-
-	hostID := host.ID()
-	logger.Printf("Created Node at: %s/p2p/%s", host.Addrs()[0].String(), hostID)
-	logger.Printf("Node ID: %s", hostID)
-
-	defer func() {
-		if err := host.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
-	postUpdater, err := postupdater.NewPostUpdater(ctx, host, inputCommands.username)
-	if err != nil {
-		logger.Fatalln(err)
-	}
-
-	storedTimeline, err := timeline.CreateOrReadTimeline(inputCommands.storage, postUpdater.UserTopic)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
-	nodeCid, err := common.GenerateCid(ctx, inputCommands.username)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
-	err = kad.Provide(ctx, nodeCid, true)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
-	followingTimelines, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
-	// TODO: MOVE TO GOROUTINE
-	for _, followingCid := range followingTimelines.FollowingCids {
-		err := kad.Provide(ctx, followingCid, true)
-		if err != nil {
-			logger.Fatalf(err.Error())
-			return
-		}
-	}
-
-	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
-
-	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
-
+	host := kad.Host()
 	r := gin.Default()
 	r.GET("/routing/info", func(c *gin.Context) {
 		kad.RoutingTable().Print()
@@ -171,7 +67,7 @@ func main() {
 				return nil, errors.New("already following")
 			}
 
-			receivedTimeline, err := service.Follow(ctx, targetCid, host, kad)
+			receivedTimeline, err := Follow(ctx, targetCid, host, kad)
 
 			if err != nil {
 				logger.Println(err.Error())
@@ -179,7 +75,7 @@ func main() {
 				return nil, err
 			}
 
-			receivedTimeline.Path = filepath.Join(inputCommands.storage, fmt.Sprintf("storage-%s", user))
+			receivedTimeline.Path = filepath.Join(storage, fmt.Sprintf("storage-%s", user))
 			err = receivedTimeline.WriteFile()
 
 			if err != nil {
@@ -287,15 +183,15 @@ func main() {
 	})
 
 	r.POST("/post/create", func(c *gin.Context) {
-		var json PostRequest
+		var json postRequest
 
-		if err = c.ShouldBindJSON(&json); err != nil {
+		if err := c.ShouldBindJSON(&json); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
 		storedTimeline.Lock()
-		err := storedTimeline.AddPost(json.Text, inputCommands.username)
+		err := storedTimeline.AddPost(json.Text, username)
 		if err != nil {
 			storedTimeline.Unlock()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -311,13 +207,5 @@ func main() {
 		}
 	})
 
-	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-}
-
-type PostRequest struct {
-	Text string `json:"text" binding:"required"`
+	return r.Run(fmt.Sprintf(":%d", serverPort))
 }

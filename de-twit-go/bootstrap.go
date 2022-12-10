@@ -3,11 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"de-twit-go/src/dht"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"src/common"
 	"time"
 )
 
@@ -42,7 +42,7 @@ func main() {
 		bootstrapNodes = append(bootstrapNodes, s)
 	}
 
-	kad, host, err := common.StartDHT(ctx, *port, bootstrapNodes)
+	kad, host, err := dht.NewDHT(ctx, *port, bootstrapNodes)
 	if err != nil {
 		logger.Fatalf("Error creating DHT: %s", err)
 	}

@@ -2,6 +2,8 @@ package timeline
 
 import (
 	"context"
+	"de-twit-go/src/common"
+	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
 	"github.com/ipfs/go-cid"
@@ -12,8 +14,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"src/common"
-	pb "src/timelinepb"
 	"strings"
 	"sync"
 )
@@ -66,7 +66,6 @@ func ReadFollowingTimelines(ctx context.Context, storagePath string) (*Following
 		Timelines:     make(map[cid.Cid]*Timeline),
 		FollowingCids: make([]cid.Cid, 0),
 	}
-
 
 	err := filepath.Walk(storagePath, func(path string, info fs.FileInfo, err error) error {
 		if info.Name() == "storage" {

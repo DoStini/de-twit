@@ -3,6 +3,8 @@ package service
 import (
 	"bufio"
 	"context"
+	"de-twit-go/src/common"
+	"de-twit-go/src/timeline"
 	"fmt"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -10,8 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"log"
 	"os"
-	"src/common"
-	"src/timeline"
 )
 
 func RegisterStreamHandler(ctx context.Context, host host.Host, nodeCid cid.Cid, followingTimelines *timeline.FollowingTimelines) {
