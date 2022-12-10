@@ -21,7 +21,15 @@ import (
 	"sync"
 )
 
-func main() {
+type InputCommands struct {
+	port int64
+	serverPort int64
+	bootstrap string
+	storage string
+	username string
+}
+
+func parseCommands() InputCommands {
 	port := flag.Int64("port", 4000, "The port of this host")
 	servePort := flag.Int64("serve", 5000, "The port used for http serving")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
@@ -37,11 +45,23 @@ func main() {
 		*storage = filepath.Join("storage", fmt.Sprintf("%s", *username))
 	}
 
-	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
+	return InputCommands{
+		port:       *port,
+		serverPort: *servePort,
+		bootstrap:  *bootstrap,
+		storage:    *storage,
+		username:   *username,
+	}
+}
+
+func main() {
+	inputCommands := parseCommands()
+
+	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%s.log", inputCommands.username), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	logger = log.New(logFile, fmt.Sprintf("node:%d  |  ", *port), log.Ltime|log.Lshortfile)
+	logger = log.New(logFile, fmt.Sprintf("node:%s  |  ", inputCommands.username), log.Ltime|log.Lshortfile)
 
 	defer logFile.Close()
 
@@ -50,7 +70,7 @@ func main() {
 
 	defer cancel()
 
-	f, err := os.OpenFile(*bootstrap, os.O_RDONLY, 0644)
+	f, err := os.OpenFile(inputCommands.bootstrap, os.O_RDONLY, 0644)
 	if err != nil {
 		logger.Fatalf(err.Error())
 	}
@@ -67,7 +87,10 @@ func main() {
 		logger.Fatalf(err.Error())
 	}
 
-	kad, host := common.StartDHT(ctx, *port, bootstrapNodes)
+	kad, host, err := common.StartDHT(ctx, inputCommands.port, bootstrapNodes)
+	if err != nil {
+		logger.Fatalf("Error creating DHT: %s\n", err.Error())
+	}
 
 	hostID := host.ID()
 	logger.Printf("Created Node at: %s/p2p/%s", host.Addrs()[0].String(), hostID)
@@ -79,18 +102,18 @@ func main() {
 		}
 	}()
 
-	postUpdater, err := postupdater.NewPostUpdater(ctx, host, *username)
+	postUpdater, err := postupdater.NewPostUpdater(ctx, host, inputCommands.username)
 	if err != nil {
 		logger.Fatalln(err)
 	}
 
-	storedTimeline, err := timeline.CreateOrReadTimeline(*storage, postUpdater.UserTopic)
+	storedTimeline, err := timeline.CreateOrReadTimeline(inputCommands.storage, postUpdater.UserTopic)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
 	}
 
-	nodeCid, err := common.GenerateCid(ctx, *username)
+	nodeCid, err := common.GenerateCid(ctx, inputCommands.username)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
@@ -102,7 +125,7 @@ func main() {
 		return
 	}
 
-	timelines, followingCids, err := timeline.ReadFollowingTimelines(ctx, *storage)
+	timelines, followingCids, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
@@ -151,7 +174,7 @@ func main() {
 			}
 		} else {
 			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
-			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", *port))
+			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", inputCommands.port))
 		}
 		followingCidsLock.RUnlock()
 
@@ -206,7 +229,7 @@ func main() {
 				return nil, err
 			}
 
-			receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", user))
+			receivedTimeline.Path = filepath.Join(inputCommands.storage, fmt.Sprintf("storage-%s", user))
 			err = receivedTimeline.WriteFile()
 
 			if err != nil {
@@ -338,7 +361,7 @@ func main() {
 		}
 	})
 
-	err = r.Run(fmt.Sprintf(":%d", *servePort))
+	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return

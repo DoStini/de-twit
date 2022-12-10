@@ -11,7 +11,7 @@ message Timeline {
 }
 
 message Post {
-  string text = 1;
-  string id = 2;
+  string id = 1;
+  string text = 2;
   google.protobuf.Timestamp last_updated = 3;
 }

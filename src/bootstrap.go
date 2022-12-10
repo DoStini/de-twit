@@ -42,7 +42,10 @@ func main() {
 		bootstrapNodes = append(bootstrapNodes, s)
 	}
 
-	kad, host := common.StartDHT(ctx, *port, bootstrapNodes)
+	kad, host, err := common.StartDHT(ctx, *port, bootstrapNodes)
+	if err != nil {
+		logger.Fatalf("Error creating DHT: %s", err)
+	}
 
 	hostID := host.ID()
 	logger.Printf("Created Node at: %s/p2p/%s", host.Addrs()[1].String(), hostID)
