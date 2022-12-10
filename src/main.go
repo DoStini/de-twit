@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -112,9 +113,9 @@ func main() {
 		return
 	}
 
-	timelinesLock := sync.RWMutex{}
 	followingCidsLock := sync.RWMutex{}
 
+	// TODO: MOVE TO GOROUTINE
 	for _, followingCid := range followingCids {
 		err := kad.Provide(ctx, followingCid, true)
 		if err != nil {
@@ -146,9 +147,7 @@ func main() {
 
 		followingCidsLock.RLock()
 		if nodeCid == requestedCid || common.Contains(followingCids, requestedCid) {
-			timelinesLock.Lock()
 			reply, err = proto.Marshal(timelines[requestedCid])
-			timelinesLock.Unlock()
 			if err != nil {
 				logger.Println("Failed to encode post:", err)
 				followingCidsLock.RUnlock()
@@ -158,7 +157,6 @@ func main() {
 			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
 			reply = []byte(fmt.Sprintf("%d-NOT-FOLLOWING", *port))
 		}
-
 		followingCidsLock.RUnlock()
 
 		_, err = rw.Write(append(reply, 0))
@@ -185,42 +183,50 @@ func main() {
 		user := c.Param("user")
 
 		targetCid, err := common.GenerateCid(ctx, user)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Can't generate content id for username")
+			return
+		}
 
 		if targetCid == nodeCid {
 			c.String(http.StatusUnprocessableEntity, "Can't follow own profile")
 			return
 		}
 
-		if common.Contains(followingCids, targetCid) {
-			c.String(http.StatusUnprocessableEntity, "Already following")
-			return
-		}
+		receivedTimeline, err := func() (*timeline.Timeline, error) {
+			followingCidsLock.Lock()
+			defer followingCidsLock.Unlock()
 
-		receivedTimeline, err := service.Follow(ctx, targetCid, host, kad)
+			if common.Contains(followingCids, targetCid) {
+				c.String(http.StatusUnprocessableEntity, "Already following")
+				return nil, errors.New("already following")
+			}
 
+			receivedTimeline, err := service.Follow(ctx, targetCid, host, kad)
+
+			if err != nil {
+				logger.Println(err.Error())
+				c.String(http.StatusInternalServerError, err.Error())
+				return nil, err
+			}
+
+			receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", user))
+			err = receivedTimeline.WriteFile()
+
+			if err != nil {
+				logger.Println(err.Error())
+				c.String(http.StatusInternalServerError, err.Error())
+				return nil, err
+			}
+
+			followingCids = append(followingCids, targetCid)
+			timelines[targetCid] = receivedTimeline
+
+			return receivedTimeline, nil
+		}()
 		if err != nil {
-			logger.Println(err.Error())
-			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
-
-		receivedTimeline.Path = filepath.Join(*storage, fmt.Sprintf("storage-%s", user))
-		err = receivedTimeline.WriteFile()
-
-		if err != nil {
-			logger.Println(err.Error())
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		followingCidsLock.Lock()
-		timelinesLock.Lock()
-
-		followingCids = append(followingCids, targetCid)
-		timelines[targetCid] = receivedTimeline
-
-		followingCidsLock.Unlock()
-		timelinesLock.Unlock()
 
 		posts := make([]string, 0)
 		for _, post := range receivedTimeline.Posts {
@@ -236,32 +242,38 @@ func main() {
 		user := c.Param("user")
 
 		targetCid, err := common.GenerateCid(ctx, user)
-
-		targetIndex := common.FindIndex(followingCids, targetCid)
-
-		if targetIndex == -1 {
-			c.String(http.StatusUnprocessableEntity, "Not following")
-			return
-		}
-
-		timelinesLock.Lock()
-
-		targetTimeline := timelines[targetCid]
-
-		delete(timelines, targetCid)
-		followingCids = common.RemoveIndex(followingCids, targetIndex)
-
-		timelinesLock.Unlock()
-
-		err = targetTimeline.DeleteFile()
 		if err != nil {
-			logger.Println(err.Error())
-			c.String(http.StatusInternalServerError, err.Error())
+			c.String(http.StatusInternalServerError, "Can't generate content id for username")
 			return
 		}
+
+		err = func() error {
+			followingCidsLock.Lock()
+			defer followingCidsLock.Unlock()
+
+			targetIndex := common.FindIndex(followingCids, targetCid)
+
+			if targetIndex == -1 {
+				c.String(http.StatusUnprocessableEntity, "Not following")
+				return errors.New("not following")
+			}
+
+			targetTimeline := timelines[targetCid]
+
+			delete(timelines, targetCid)
+			followingCids = common.RemoveIndex(followingCids, targetIndex)
+
+			err = targetTimeline.DeleteFile()
+			if err != nil {
+				logger.Println(err.Error())
+				c.String(http.StatusInternalServerError, err.Error())
+				return err
+			}
+
+			return nil
+		}()
 
 		c.String(http.StatusOK, "")
-
 		// TODO: DISCONNECT PUB SUB
 	})
 
