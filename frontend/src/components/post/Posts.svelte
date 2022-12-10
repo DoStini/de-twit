@@ -28,8 +28,8 @@
     <div class="grid grid-cols-8 gap-4 sm:m-20 m-5">
 
     {#each posts as post}
-        {@const colStartPosition = post.username === "andremoreira9" ? 2 : 3}
-        <div class="sm:col-start-{colStartPosition} sm:col-span-5 col-span-12">
+        {@const isUser = post.username === "andremoreira9" }
+        <div class="{isUser ? 'card-show-user' : 'card-show-other'}">
             <Post post="{post}"></Post>
         </div>
 
