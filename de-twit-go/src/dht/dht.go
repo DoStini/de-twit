@@ -1,13 +1,17 @@
-package common
+package dht
 
 import (
 	"context"
+	"fmt"
+	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
 	"log"
+	"math/rand"
 	"sync"
 )
 
@@ -28,7 +32,46 @@ func (nv NullValidator) Select(key string, values [][]byte) (int, error) {
 	return 0, nil
 }
 
-func StartDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host, error) {
+func createNode(ctx context.Context, port int64) host.Host {
+	logger := ctx.Value("logger").(*log.Logger)
+
+	privKey := generatePrivateKey(ctx, port)
+
+	addr, err := addressWithPort(port)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	h, err := libp2p.New(
+		libp2p.Identity(privKey),
+		libp2p.ListenAddrs(
+			addr,
+		),
+	)
+	if err != nil {
+		logger.Fatalf("Err on creating host: %v", err)
+	}
+
+	return h
+}
+
+func addressWithPort(port int64) (multiaddr.Multiaddr, error) {
+	return multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port))
+}
+
+func generatePrivateKey(ctx context.Context, seed int64) crypto.PrivKey {
+	logger := ctx.Value("logger").(*log.Logger)
+	randBytes := rand.New(rand.NewSource(seed))
+	prvKey, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, randBytes)
+
+	if err != nil {
+		logger.Fatalf("Could not generate Private Key: %v", err)
+	}
+
+	return prvKey
+}
+
+func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.IpfsDHT, host.Host, error) {
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var bootstrapNodeInfos []peer.AddrInfo

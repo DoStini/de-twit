@@ -17,17 +17,16 @@ import (
 	"time"
 )
 
-
 func main() {
 	port := flag.Int64("port", 4000, "The port of this host")
 	bootstrap := flag.String("bootstrap", "", "The bootstrapping file")
 	flag.Parse()
 
-	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE | os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(fmt.Sprintf("logs/log-%d.log", *port), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	logger = log.New(logFile, fmt.Sprintf("node:%d  |  ", *port), log.Ltime | log.Lshortfile)
+	logger = log.New(logFile, fmt.Sprintf("node:%d  |  ", *port), log.Ltime|log.Lshortfile)
 
 	defer logFile.Close()
 
@@ -63,7 +62,7 @@ func main() {
 		}
 	}()
 
-	if *port >= 4000 && *port < 4500{
+	if *port >= 4000 && *port < 4500 {
 		logger.Println("testput")
 
 		hash := sha256.New()
@@ -74,13 +73,13 @@ func main() {
 		if err != nil {
 			return
 		}
-	} else if *port >= 4500  && *port < 5000 {
+	} else if *port >= 4500 && *port < 5000 {
 		logger.Println("testprovide")
 
 		pref := cid.Prefix{
-			Version: 1,
-			Codec: uint64(multicodec.Raw),
-			MhType: multihash.SHA2_256,
+			Version:  1,
+			Codec:    uint64(multicodec.Raw),
+			MhType:   multihash.SHA2_256,
 			MhLength: -1, // default length
 		}
 		c, err := pref.Sum([]byte("key2"))
@@ -111,16 +110,15 @@ func main() {
 		logger.Printf("Finding providers")
 
 		pref := cid.Prefix{
-			Version: 1,
-			Codec: uint64(multicodec.Raw),
-			MhType: multihash.SHA2_256,
+			Version:  1,
+			Codec:    uint64(multicodec.Raw),
+			MhType:   multihash.SHA2_256,
 			MhLength: -1, // default length
 		}
 		c, err := pref.Sum([]byte("key2"))
 		if err != nil {
 			logger.Fatalf(err.Error())
 		}
-
 
 		var peers []peer.AddrInfo
 		logger.Printf("Finding providers")
@@ -138,12 +136,11 @@ func main() {
 		logger.Println(peers)
 	}
 
-
 	ticker := time.NewTicker(2000 * time.Millisecond)
 
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			logger.Println("ROUTING TABLE:")
 			kad.RoutingTable().Print()
 		}

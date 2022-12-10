@@ -2,13 +2,16 @@ package postupdater
 
 import (
 	"context"
+	"de-twit-go/src/common"
+	"de-twit-go/src/timeline"
+	pb "de-twit-go/src/timelinepb"
+	"errors"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"log"
 	"os"
-	pb "src/timelinepb"
 	"sync"
 )
 
@@ -120,6 +123,45 @@ func (psu *PostUpdater) listenOnTopic(subscription *pubsub.Subscription) {
 		// send valid messages onto the Messages channel
 		psu.updateChan <- post
 	}
+}
+
+func (psu *PostUpdater) ListenOnFollowingTopic(user string, followingTimelines *timeline.FollowingTimelines) error {
+	var logger *log.Logger
+	logger = psu.ctx.Value("logger").(*log.Logger)
+	if logger == nil {
+		logger = log.New(os.Stdin, "listen: ", log.Ltime|log.Lshortfile)
+	}
+
+	return psu.ListenOnTopic(user, func(postUpdate *pb.Post) {
+		logger.Printf("Hey baby, new post from %s just dropped!\n", postUpdate.User)
+		logger.Println(postUpdate.Text)
+
+		targetCid, err := common.GenerateCid(psu.ctx, postUpdate.User)
+		if err != nil {
+			logger.Printf("Couldn't process message: %s\n", err)
+			return
+		}
+
+		err = func() error {
+			followingTimelines.RLock()
+			defer followingTimelines.RUnlock()
+
+			if !common.Contains(followingTimelines.FollowingCids, targetCid) {
+				return errors.New("not following")
+			}
+			targetTimeline := followingTimelines.Timelines[targetCid]
+			err := targetTimeline.AddPost(postUpdate.Id, postUpdate.Text, postUpdate.User, postUpdate.LastUpdated)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}()
+		if err != nil {
+			logger.Printf("Couldn't process message: %s\n", err)
+			return
+		}
+	})
 }
 
 func NewPostUpdater(ctx context.Context, h host.Host, username string) (*PostUpdater, error) {

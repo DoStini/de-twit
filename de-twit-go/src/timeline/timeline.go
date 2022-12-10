@@ -2,6 +2,8 @@ package timeline
 
 import (
 	"context"
+	"de-twit-go/src/common"
+	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
 	"github.com/ipfs/go-cid"
@@ -12,9 +14,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"src/common"
-	pb "src/timelinepb"
 	"strings"
+	"sync"
 )
 
 type PB = pb.Timeline
@@ -26,7 +27,14 @@ type Timeline struct {
 
 type OwnTimeline struct {
 	Timeline
+	sync.RWMutex
 	topic *pubsub.Topic
+}
+
+type FollowingTimelines struct {
+	sync.RWMutex
+	Timelines     map[cid.Cid]*Timeline
+	FollowingCids []cid.Cid
 }
 
 func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline, error) {
@@ -53,9 +61,11 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 	return storedTimeline, nil
 }
 
-func ReadFollowingTimelines(ctx context.Context, storagePath string) (map[cid.Cid]*Timeline, []cid.Cid, error) {
-	timelines := make(map[cid.Cid]*Timeline)
-	storedCids := make([]cid.Cid, 0)
+func ReadFollowingTimelines(ctx context.Context, storagePath string) (*FollowingTimelines, error) {
+	followingTimelines := &FollowingTimelines{
+		Timelines:     make(map[cid.Cid]*Timeline),
+		FollowingCids: make([]cid.Cid, 0),
+	}
 
 	err := filepath.Walk(storagePath, func(path string, info fs.FileInfo, err error) error {
 		if info.Name() == "storage" {
@@ -77,7 +87,7 @@ func ReadFollowingTimelines(ctx context.Context, storagePath string) (map[cid.Ci
 			return err
 		}
 
-		storedCids = append(storedCids, fileCid)
+		followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, fileCid)
 		storedTimeline := Timeline{Path: path}
 
 		err = ReadTimelinePbFromFile(path, &storedTimeline.PB)
@@ -85,16 +95,16 @@ func ReadFollowingTimelines(ctx context.Context, storagePath string) (map[cid.Ci
 			return err
 		}
 
-		timelines[fileCid] = &storedTimeline
+		followingTimelines.Timelines[fileCid] = &storedTimeline
 
 		return nil
 	})
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return timelines, storedCids, nil
+	return followingTimelines, nil
 }
 
 func ReadTimelinePbFromFile(path string, buffer *PB) error {

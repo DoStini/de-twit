@@ -1,4 +1,4 @@
-module src
+module de-twit-go
 
 go 1.19
 

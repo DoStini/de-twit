@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"context"
+	"de-twit-go/src/timeline"
 	"errors"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -10,7 +11,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"log"
-	timeline "src/timeline"
 )
 
 func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timeline.Timeline, error) {
