@@ -1,6 +1,9 @@
 import type PostData from "../types/PostData";
+import {addNewPost} from "../actions/posts";
 
 export const createPost: (post: PostData) => (void) = async (post: PostData) => {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    addNewPost(post)
 }
 
 export const retrieveTimeline : () => (Promise<PostData[]>) = async () => {

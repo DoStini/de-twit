@@ -10,12 +10,33 @@
     import NewPostModal from "../components/post/NewPostModal.svelte";
     import {closeNewPostModal, openNewPostModal} from "../actions/newPostModal.js";
     import {serializeForm} from "../utils/form.js";
+    import {createPost} from "../services/posts.js";
 
     let posts: PostData[]
     postsStore.subscribe((value) => posts = value)
 
     let newPosts: PostData[]
     newPostsStore.subscribe((value) => newPosts = value)
+
+    let loading: boolean = false
+
+    let handleCreatePost = async (data) => {
+        loading = true
+        try {
+            await createPost({
+                username: "andremoreira9",
+                text: data.content,
+                timestamp: new Date()
+            });
+            closeNewPostModal()
+            loading = false
+            return true
+        } catch (e) {
+            console.error(e)
+            loading = false
+            return true
+        }
+    }
 
     onMount(async () => {
         try {
@@ -31,7 +52,4 @@
 
 <Fab action={openNewPostModal}/>
 
-<NewPostModal submit={(data) => {
-    console.log(data)
-    closeNewPostModal()
-}}/>
+<NewPostModal loading={loading} close={closeNewPostModal} submit={handleCreatePost}/>
