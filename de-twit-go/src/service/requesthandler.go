@@ -5,7 +5,6 @@ import (
 	"de-twit-go/src/common"
 	"de-twit-go/src/postupdater"
 	"de-twit-go/src/timeline"
-	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
@@ -23,11 +22,20 @@ type HTTPServer struct {
 	ctx context.Context
 }
 
+type errorResponse struct {
+	errorCode int
+	reason string
+}
+
+func (e *errorResponse) Error() string {
+	return e.reason
+}
+
 func (r *HTTPServer) RegisterGetRouting(kad *dht.IpfsDHT) {
 	r.GET("/routing/info", func(c *gin.Context) {
 		kad.RoutingTable().Print()
 
-		c.String(http.StatusOK, "ok")
+		c.String(http.StatusOK, "")
 	})
 }
 
@@ -46,39 +54,36 @@ func (r *HTTPServer) RegisterPostFollow(
 
 		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "Can't generate content id for username")
+			logger.Println("PostFollow: Couldn't Generate content id: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"couldn't generate content id for username"})
 			return
 		}
 
 		if targetCid == nodeCid {
-			c.String(http.StatusUnprocessableEntity, "Can't follow own profile")
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error":"can't follow own profile"})
 			return
 		}
 
-		receivedTimeline, err := func() (*timeline.Timeline, error) {
+		receivedTimeline, resErr := func() (*timeline.Timeline, *errorResponse) {
 			followingTimelines.Lock()
 			defer followingTimelines.Unlock()
 
 			if common.Contains(followingTimelines.FollowingCids, targetCid) {
-				c.String(http.StatusUnprocessableEntity, "Already following")
-				return nil, errors.New("already following")
+				return nil, &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "already following"}
 			}
 
 			receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
-
 			if err != nil {
-				logger.Println(err.Error())
-				c.String(http.StatusInternalServerError, err.Error())
-				return nil, err
+				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
+				return nil,  &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
 			receivedTimeline.Path = filepath.Join(storage, fmt.Sprintf("storage-%s", user))
-			err = receivedTimeline.WriteFile()
 
+			err = receivedTimeline.WriteFile()
 			if err != nil {
-				logger.Println(err.Error())
-				c.String(http.StatusInternalServerError, err.Error())
-				return nil, err
+				logger.Println("PostFollow: Couldn't Write Timeline: ", err.Error())
+				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
 			followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, targetCid)
@@ -86,15 +91,16 @@ func (r *HTTPServer) RegisterPostFollow(
 
 			return receivedTimeline, nil
 		}()
-		if err != nil {
+		if resErr != nil {
+			c.JSON(resErr.errorCode, gin.H{"error":resErr.reason})
 			return
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
 		err = postUpdater.ListenOnFollowingTopic(user, followingTimelines)
 		if err != nil {
-			logger.Println(err)
-			c.String(http.StatusInternalServerError, "%s", err)
+			logger.Println("PostFollow: Couldn't Listen on topic", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -118,24 +124,23 @@ func (r *HTTPServer) RegisterPostUnfollow(
 
 		targetCid, err := common.GenerateCid(r.ctx, user)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "Can't generate content id for username")
+			logger.Println("PostFollow: Couldn't Generate content id: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error":"couldn't generate content id for username"})
 			return
 		}
 
-		err = func() error {
+		resErr := func() *errorResponse {
 			followingTimelines.Lock()
 			defer followingTimelines.Unlock()
 
 			targetIndex := common.FindIndex(followingTimelines.FollowingCids, targetCid)
 			if targetIndex == -1 {
-				c.String(http.StatusUnprocessableEntity, "Not following")
-				return errors.New("not following")
+				return &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "not following"}
 			}
 
 			err := postUpdater.StopListeningTopic(user)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return err
+				return &errorResponse{errorCode: http.StatusBadRequest, reason: err.Error()}
 			}
 
 			targetTimeline := followingTimelines.Timelines[targetCid]
@@ -145,13 +150,16 @@ func (r *HTTPServer) RegisterPostUnfollow(
 
 			err = targetTimeline.DeleteFile()
 			if err != nil {
-				logger.Println(err.Error())
-				c.String(http.StatusInternalServerError, err.Error())
-				return err
+				logger.Println("PostUnfollow: Couldn't delete timeline ", err)
+				return &errorResponse{errorCode: http.StatusInternalServerError, reason: "couldn't delete timeline"}
 			}
 
 			return nil
 		}()
+		if resErr != nil {
+			c.JSON(resErr.errorCode, gin.H{"error": resErr.reason})
+			return
+		}
 
 		c.String(http.StatusOK, "")
 	})
@@ -172,7 +180,7 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 		err := storedTimeline.AddPost(json.Text, username)
 		if err != nil {
 			storedTimeline.Unlock()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		storedTimeline.Unlock()
@@ -183,6 +191,8 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 			logger.Println(post.Text)
 			logger.Printf("Posted at %s", post.LastUpdated.String())
 		}
+
+		c.String(http.StatusOK, "")
 	})
 }
 
