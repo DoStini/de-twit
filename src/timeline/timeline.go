@@ -196,7 +196,7 @@ func (t *Timeline) AddPost(text string) error {
 	return t.addPost(&post)
 }
 
-func (t *OwnTimeline) AddPost(text string) {
+func (t *OwnTimeline) AddPost(text string) error {
 	post := pb.Post{
 		Text:        text,
 		Id:          fmt.Sprintf("%d", len(t.Posts)),
@@ -204,11 +204,19 @@ func (t *OwnTimeline) AddPost(text string) {
 	}
 
 	err := t.Timeline.addPost(&post)
+	if err != nil {
+		return err
+	}
 
 	out, err := proto.Marshal(&post)
+	if err != nil {
+		return err
+	}
 
 	err = t.topic.Publish(context.Background(), out)
 	if err != nil {
-		log.Println("Failed to publish: ", err)
+		return err
 	}
+
+	return nil
 }

@@ -114,6 +114,7 @@ func main() {
 	}
 
 	followingCidsLock := sync.RWMutex{}
+	ownTimelineLock := sync.RWMutex{}
 
 	// TODO: MOVE TO GOROUTINE
 	for _, followingCid := range followingCids {
@@ -285,7 +286,14 @@ func main() {
 			return
 		}
 
-		storedTimeline.AddPost(json.Text)
+		ownTimelineLock.Lock()
+		err := storedTimeline.AddPost(json.Text)
+		if err != nil {
+			ownTimelineLock.Unlock()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ownTimelineLock.Unlock()
 
 		logger.Println("Current OwnTimeline: ")
 
