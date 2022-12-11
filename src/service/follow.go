@@ -105,14 +105,13 @@ func mergeTimelines(t *pb.Timeline, timelines []*timeline.Timeline) error {
 	}
 
 	sort.SliceStable(posts, func(i, j int) bool {
-		return posts[i].LastUpdated.AsTime().Nanosecond() < posts[j].LastUpdated.AsTime().Nanosecond()
+		return posts[i].LastUpdated.AsTime().After(posts[j].LastUpdated.AsTime())
 	})
 
 	for _, post := range posts {
-		if containsPost(t.Posts, post) {
-			continue
+		if !containsPost(t.Posts, post) {
+			t.Posts = append(t.Posts, post)
 		}
-		t.Posts = append(t.Posts, post)
 	}
 
 	return nil
