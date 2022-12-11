@@ -19,8 +19,24 @@
         {#if error}
             <div class="text-xl">User not found</div>
         {:else }
-            <div class="text-xl text-accent">{user.username}</div>
-            <div class="text-sm">{user.posts.length.toString()} Posts</div>
+            <div class="flex justify-between mb-4 content-center">
+                <div>
+                    <div class="text-xl text-accent">{user.username}</div>
+                    <div class="text-sm">
+                        {#if user.posts.length === 0}
+                            This user hasn't posted anything yet
+                        {:else if user.posts.length === 1}
+                            1 Post
+                        {:else}
+                            {user.posts.length.toString()} Posts
+                        {/if}
+                    </div>
+                </div>
+                <div class="mask mask-hexagon h-14 w-14">
+                    <img src="https://placeimg.com/192/192/people" />
+                </div>
+            </div>
+
             <div class="card-actions justify-end">
                 {#if !user.following}
                     <div class="btn text-success {loading ? 'loading' : ''}" on:click={onFollow}>

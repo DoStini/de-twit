@@ -6,6 +6,7 @@
     import type UserData from "../../types/UserData";
     import UserBadge from "./UserBadge.svelte";
     import {followUser, searchUser} from "../../services/users";
+    import { clickOutside } from '../../utils/clickOutisde';
 
     let submit: (formData: FormValues) => (Promise<boolean>);
     let close: () => (void)
@@ -50,8 +51,6 @@
         }
     }
 
-
-
     const handleClose = () => {
         closeSearchUserModal()
         resetUser()
@@ -59,17 +58,23 @@
 
     let open: boolean;
 
+    const resetForm = (evt: Event = null) => {
+        const form: any = evt ? evt.target : document.getElementById("find-user-modal")
+
+        setTimeout(form.reset.bind(form), 200)
+    }
+
     const onSubmitSearch = async (evt) => {
         const formData = serializeForm(new FormData(evt.target));
         const success = await submitSearch(formData);
 
         if (success) {
-            evt.target.reset();
+            resetForm(evt)
         }
     }
 
-    const onClose = (evt) => {
-        evt.target.parentNode.parentNode.reset();
+    const onClose = () => {
+        resetForm()
         handleClose()
     }
 
@@ -78,7 +83,7 @@
 
 <input type="checkbox" bind:checked="{open}" id="user-modal" class="modal-toggle" />
 <div class="modal">
-    <div class="modal-box">
+    <div class="modal-box" use:clickOutside={() => open && onClose()}>
         <form id="find-user-modal" on:submit|preventDefault={onSubmitSearch}>
             <h3 class="font-bold text-lg">Find friends!</h3>
             {#if user || error}
