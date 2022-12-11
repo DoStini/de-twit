@@ -75,11 +75,6 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 
 	logger.Println("Responses: ", peerResps)
 
-	err := kad.Provide(ctx, targetCid, true)
-	if err != nil {
-		return nil, err
-	}
-
 	if len(receivedTimelines) == 0 {
 		return nil, errors.New("user not found")
 	}
