@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p/core/host"
 	"io"
 	"log"
 	"net/http"
@@ -123,7 +122,6 @@ func (r *HTTPServer) RegisterPostFollow(
 	httpHandler func(post *timelinepb.Post),
 ) {
 	logger := common.GetLogger(r.ctx)
-	host := kad.Host()
 
 	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
@@ -148,9 +146,9 @@ func (r *HTTPServer) RegisterPostFollow(
 				return nil, &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "already following"}
 			}
 
-			receivedTimelinePB, err := Follow(r.ctx, targetCid, host, kad)
+			receivedTimelinePB, err := FindPosts(r.ctx, targetCid, kad)
 			if err != nil {
-				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
+				logger.Println("PostFollow: Couldn't FindPosts: ", err.Error())
 				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
@@ -286,18 +284,24 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 
 func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
 	return r.GET("/timeline", func(c *gin.Context) {
-		posts := make([]*timelinepb.Post, 0)
+		timelinePBs := make([]*timelinepb.Timeline, 0)
+
 		timelines.RLock()
 
-		for _, currentTimeline := range timelines.Timelines {
-			for _, post := range currentTimeline.Posts {
-				posts = append(posts, post)
-			}
+		for _, curTimeline := range timelines.Timelines {
+			timelinePBs = append(timelinePBs, &curTimeline.PB)
 		}
 
 		timelines.RUnlock()
 
-		c.JSON(http.StatusOK, posts)
+		finalTimeline := &timelinepb.Timeline{Posts: make([]*timelinepb.Post, 0)}
+		err := timeline.MergeTimelines(finalTimeline, timelinePBs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+
+		c.JSON(http.StatusOK, finalTimeline.Posts)
 		return
 	})
 }
@@ -322,7 +326,7 @@ func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
 	})
 }
 
-func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
+func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
 	return r.GET("/:user", func(c *gin.Context) {
 		user := c.Param("user")
 
@@ -346,7 +350,7 @@ func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *ti
 
 		followingTimelines.RUnlock()
 
-		receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+		receivedTimeline, err := FindPosts(r.ctx, targetCid, kad)
 
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

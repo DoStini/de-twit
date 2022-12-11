@@ -3,14 +3,11 @@ package timeline
 import (
 	"context"
 	"de-twit-go/src/common"
-	dht2 "de-twit-go/src/dht"
 	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
 	"github.com/ipfs/go-cid"
-	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"io/fs"
@@ -64,13 +61,6 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 	storedTimeline.Path = path
 
 	return storedTimeline, nil
-}
-
-func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
-	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
-	dht2.HandleWithProviders(ctx, cid, kad, func(info peer.AddrInfo) error {
-		return nil
-	})
 }
 
 func ReadFollowingTimelines(ctx context.Context, storagePath string) (*FollowingTimelines, error) {
@@ -201,7 +191,7 @@ func (t *Timeline) WriteFile() error {
 }
 
 func (t *Timeline) addPost(post *pb.Post) error {
-	t.Posts = append(t.Posts, post)
+	t.Posts = append([]*pb.Post{post}, t.Posts...)
 
 	out, err := proto.Marshal(t)
 	if err != nil {

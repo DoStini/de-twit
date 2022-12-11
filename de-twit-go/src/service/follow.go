@@ -10,7 +10,6 @@ import (
 	"errors"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
@@ -19,8 +18,9 @@ import (
 	"sync"
 )
 
-func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timelinepb.Timeline, error) {
+func FindPosts(ctx context.Context, targetCid cid.Cid, kad *dht.IpfsDHT) (*timelinepb.Timeline, error) {
 	logger := ctx.Value("logger").(*log.Logger)
+	host := kad.Host()
 
 	var timelineLock sync.RWMutex
 	var receivedTimelines []*timelinepb.Timeline

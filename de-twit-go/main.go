@@ -133,13 +133,56 @@ func main() {
 		serverSentStream.Message <- string(json)
 	}
 
-	for idx, followingCid := range followingTimelines.FollowingCids {
-		timeline.UpdateTimeline(ctx, followingCid, kad)
+	func() {
+		posts, err := service.FindPosts(ctx, hostCid, kad)
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
 
-		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines, serverSentStreamHandler)
+		timelines := make([]*pb.Timeline, 0)
+		timelines = append(timelines, posts)
+		timelines = append(timelines, &storedTimeline.PB)
+
+		err = timeline.MergeTimelines(&storedTimeline.PB, timelines)
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
+
+		err = storedTimeline.WriteFile()
+		if err != nil {
+			logger.Println("PostFollow: Couldn't Write Timeline: ", err.Error())
+			return
+		}
+	}()
+
+	for idx, followingCid := range followingTimelines.FollowingCids {
+		posts, err := service.FindPosts(ctx, followingCid, kad)
 		if err != nil {
 			logger.Println(err.Error())
 			continue
+		}
+		timelines := make([]*pb.Timeline, 0)
+		timelines = append(timelines, posts)
+		timelines = append(timelines, &followingTimelines.Timelines[followingCid].PB)
+
+		err = timeline.MergeTimelines(&followingTimelines.Timelines[followingCid].PB, timelines)
+		if err != nil {
+			logger.Println(err.Error())
+			continue
+		}
+
+		err = postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines, serverSentStreamHandler)
+		if err != nil {
+			logger.Println(err.Error())
+			continue
+		}
+
+		err = followingTimelines.Timelines[followingCid].WriteFile()
+		if err != nil {
+			logger.Println("PostFollow: Couldn't Write Timeline: ", err.Error())
+			return
 		}
 	}
 
@@ -164,7 +207,7 @@ func main() {
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
 	r.RegisterGetTimeline(followingTimelines)
 	r.RegisterGetTimelineStream(serverSentStream)
-	r.RegisterGetUser(ctx, followingTimelines, host, hostCid, kad)
+	r.RegisterGetUser(ctx, followingTimelines, hostCid, kad)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {

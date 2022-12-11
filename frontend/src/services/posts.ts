@@ -29,7 +29,7 @@ export const retrieveTimeline : () => (Promise<PostData[]>) = async () => {
         }).catch(error => {
             console.log(error);
         return [];
-    })).map(parsePost).sort(((item1: { timestamp: number; }, item2: { timestamp: number; }) => item2.timestamp - item1.timestamp));
+    })).map(parsePost);
     // TODO: ORDER FROM BACKEND
 
     return data;
