@@ -1,6 +1,7 @@
 <script lang="ts">
 
     import type UserData from "../../types/UserData";
+    import {env} from "$env/dynamic/public";
 
     export let user: UserData
     export let error: boolean
@@ -37,17 +38,19 @@
                 </div>
             </div>
 
-            <div class="card-actions justify-end">
-                {#if !user.following}
-                    <div class="btn text-success {loading ? 'loading' : ''}" on:click={onFollow}>
-                        Follow
-                    </div>
-                {:else }
-                    <div class="btn text-error {loading ? 'loading' : ''}" on:click={onFollow}>
-                        Unfollow
-                    </div>
-                {/if}
-            </div>
+            {#if user.username !== env.PUBLIC_USERNAME}
+                <div class="card-actions justify-end">
+                    {#if !user.following}
+                        <div class="btn text-success {loading ? 'loading' : ''}" on:click={onFollow}>
+                            Follow
+                        </div>
+                    {:else }
+                        <div class="btn text-error {loading ? 'loading' : ''}" on:click={onFollow}>
+                            Unfollow
+                        </div>
+                    {/if}
+                </div>
+            {/if}
         {/if}
     </div>
 </div>
