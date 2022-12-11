@@ -5,12 +5,15 @@ import (
 	"context"
 	"de-twit-go/src/timeline"
 	"de-twit-go/src/timelinepb"
+	"encoding/binary"
 	"errors"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"log"
 	"sort"
 )
@@ -39,39 +42,68 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 			continue
 		}
 		stream, err := host.NewStream(ctx, currPeer.ID, "/p2p/1.0.0")
-		if err != nil {
-			logger.Println(err.Error())
-			continue
-		}
+		err = func() error {
+			defer func(stream network.Stream) {
+				err := stream.Close()
+				if err != nil {
+					logger.Println(err)
+				}
+			}(stream)
 
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+			if err != nil {
+				logger.Println(err.Error())
+				return nil
+			}
 
-		_, err = rw.Write(append(targetCid.Bytes(), 0))
+			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+			_, err = rw.Write(append(targetCid.Bytes(), 0))
+			if err != nil {
+				return err
+			}
+
+			err = rw.Flush()
+			if err != nil {
+				return err
+			}
+
+			sizeBuf, err := rw.ReadBytes(0)
+			if err != nil {
+				return err
+			}
+			logger.Println(len(sizeBuf), sizeBuf[0])
+			if len(sizeBuf) == 1 && sizeBuf[0] == 0 {
+				logger.Println("Received Nothing")
+				return nil
+			}
+
+			size, i := binary.Varint(sizeBuf)
+			if i <= 0 {
+				return errors.New("value larger than 64 bits")
+			}
+
+			limitedReader := io.LimitReader(rw.Reader, size)
+			resp := make([]byte, size)
+			_, err = limitedReader.Read(resp)
+			if err != nil {
+				return err
+			}
+
+			var t timeline.Timeline
+
+			err = proto.Unmarshal(resp, &t)
+			if err != nil {
+				logger.Println(err.Error())
+				peerResps = append(peerResps, string(resp))
+			} else {
+				peerResps = append(peerResps, t.String())
+				receivedTimelines = append(receivedTimelines, &t)
+			}
+
+			return nil
+		}()
 		if err != nil {
 			return nil, err
-		}
-
-		err = rw.Flush()
-		if err != nil {
-			return nil, err
-		}
-
-		resp, err := rw.ReadBytes(0)
-		if err != nil {
-			return nil, err
-		}
-
-		resp = resp[:len(resp)-1]
-
-		var t timeline.Timeline
-
-		err = proto.Unmarshal(resp, &t)
-		if err != nil {
-			logger.Println(err.Error())
-			peerResps = append(peerResps, string(resp))
-		} else {
-			peerResps = append(peerResps, t.String())
-			receivedTimelines = append(receivedTimelines, &t)
 		}
 	}
 

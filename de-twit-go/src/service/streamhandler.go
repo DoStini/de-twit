@@ -5,6 +5,7 @@ import (
 	"context"
 	"de-twit-go/src/common"
 	"de-twit-go/src/timeline"
+	"encoding/binary"
 	"fmt"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -23,6 +24,12 @@ func RegisterStreamHandler(ctx context.Context, host host.Host, nodeCid cid.Cid,
 
 	host.SetStreamHandler("/p2p/1.0.0", func(stream network.Stream) {
 		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+		defer func(stream network.Stream) {
+			err := stream.Close()
+			if err != nil {
+				logger.Println(err)
+			}
+		}(stream)
 
 		resp, err := rw.ReadBytes(0)
 		if err != nil {
@@ -39,22 +46,34 @@ func RegisterStreamHandler(ctx context.Context, host host.Host, nodeCid cid.Cid,
 		}
 
 		var reply []byte
+		var followingTimeline *timeline.Timeline
 
 		followingTimelines.RLock()
 		if nodeCid == requestedCid || common.Contains(followingTimelines.FollowingCids, requestedCid) {
-			reply, err = proto.Marshal(followingTimelines.Timelines[requestedCid])
+			followingTimeline = followingTimelines.Timelines[requestedCid]
+		}
+		followingTimelines.RUnlock()
+
+		if followingTimeline != nil {
+			size := proto.Size(&followingTimeline.PB)
+			reply = make([]byte, 0, size+binary.MaxVarintLen64+1)
+
+			reply = append(binary.AppendVarint(reply, int64(size)), 0)
+
+			buf, err := proto.Marshal(followingTimelines.Timelines[requestedCid])
 			if err != nil {
 				logger.Println("Failed to encode post:", err)
 				followingTimelines.RUnlock()
 				return
 			}
+
+			reply = append(reply, buf...)
 		} else {
 			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
-			reply = []byte(fmt.Sprintf("%s-NOT-FOLLOWING", nodeCid))
+			reply = append(make([]byte, 0), 0)
 		}
-		followingTimelines.RUnlock()
 
-		_, err = rw.Write(append(reply, 0))
+		_, err = rw.Write(reply)
 		if err != nil {
 			logger.Println(err.Error())
 			return
