@@ -191,7 +191,7 @@ func (t *Timeline) WriteFile() error {
 }
 
 func (t *Timeline) addPost(post *pb.Post) error {
-	t.Posts = append(t.Posts, post)
+	t.Posts = append([]*pb.Post{post}, t.Posts...)
 
 	out, err := proto.Marshal(t)
 	if err != nil {
