@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p/core/host"
 	"io"
 	"log"
 	"net/http"
@@ -123,7 +122,6 @@ func (r *HTTPServer) RegisterPostFollow(
 	httpHandler func(post *timelinepb.Post),
 ) {
 	logger := common.GetLogger(r.ctx)
-	host := kad.Host()
 
 	r.POST("/:user/follow", func(c *gin.Context) {
 		user := c.Param("user")
@@ -148,9 +146,9 @@ func (r *HTTPServer) RegisterPostFollow(
 				return nil, &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "already following"}
 			}
 
-			receivedTimelinePB, err := Follow(r.ctx, targetCid, host, kad)
+			receivedTimelinePB, err := FindPosts(r.ctx, targetCid, kad)
 			if err != nil {
-				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
+				logger.Println("PostFollow: Couldn't FindPosts: ", err.Error())
 				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
@@ -322,7 +320,7 @@ func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
 	})
 }
 
-func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
+func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
 	return r.GET("/:user", func(c *gin.Context) {
 		user := c.Param("user")
 
@@ -346,7 +344,7 @@ func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *ti
 
 		followingTimelines.RUnlock()
 
-		receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+		receivedTimeline, err := FindPosts(r.ctx, targetCid, kad)
 
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
