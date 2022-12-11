@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"io"
 	"log"
-	"sort"
 )
 
 func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.IpfsDHT) (*timelinepb.Timeline, error) {
@@ -114,44 +113,7 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 
 	finalTimeline := timelinepb.Timeline{Posts: make([]*timelinepb.Post, 0)}
 
-	err := mergeTimelines(&finalTimeline, receivedTimelines)
+	err := timeline.MergeTimelines(&finalTimeline, receivedTimelines)
 
 	return &finalTimeline, err
-}
-
-type postID struct {
-	id   string
-	user string
-}
-
-func mergeTimelines(t *timelinepb.Timeline, timelines []*timeline.Timeline) error {
-	contains := make(map[postID]int)
-
-	for _, curTimeline := range timelines {
-		for _, post := range curTimeline.Posts {
-			id := postID{user: post.User, id: post.Id}
-
-			if val, ok := contains[id]; ok && post.LastUpdated.AsTime().After(t.Posts[val].LastUpdated.AsTime()) {
-				t.Posts[val] = post
-			} else {
-				contains[id] = len(t.Posts)
-				t.Posts = append(t.Posts, post)
-			}
-		}
-	}
-
-	sort.SliceStable(t.Posts, func(i, j int) bool {
-		return t.Posts[i].LastUpdated.AsTime().After(t.Posts[j].LastUpdated.AsTime())
-	})
-
-	return nil
-}
-
-func containsPost(posts []*timelinepb.Post, p *timelinepb.Post) bool {
-	for _, post := range posts {
-		if post.Id == p.Id && post.User == p.User {
-			return true
-		}
-	}
-	return false
 }
