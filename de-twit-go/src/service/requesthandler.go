@@ -90,6 +90,7 @@ func (r *HTTPServer) RegisterPostFollow(
 			}
 
 			followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, targetCid)
+			followingTimelines.FollowingNames = append(followingTimelines.FollowingNames, user)
 			followingTimelines.Timelines[targetCid] = receivedTimeline
 
 			return receivedTimeline, nil
@@ -157,6 +158,7 @@ func (r *HTTPServer) RegisterPostUnfollow(
 
 			delete(followingTimelines.Timelines, targetCid)
 			followingTimelines.FollowingCids = common.RemoveIndex(followingTimelines.FollowingCids, targetIndex)
+			followingTimelines.FollowingNames = common.RemoveIndex(followingTimelines.FollowingNames, targetIndex)
 
 			err = targetTimeline.DeleteFile()
 			if err != nil {
@@ -208,9 +210,15 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 
 func NewHTTP(
 	ctx context.Context,
-) *HTTPServer {
-	return &HTTPServer{
-		Engine: gin.Default(),
-		ctx:    ctx,
+) (*HTTPServer, error) {
+	r := gin.Default()
+	err := r.SetTrustedProxies(nil)
+	if err != nil {
+		return nil, err
 	}
+
+	return &HTTPServer{
+		Engine: r,
+		ctx:    ctx,
+	}, nil
 }

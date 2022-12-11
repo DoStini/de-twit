@@ -3,11 +3,14 @@ package timeline
 import (
 	"context"
 	"de-twit-go/src/common"
+	dht2 "de-twit-go/src/dht"
 	pb "de-twit-go/src/timelinepb"
 	"errors"
 	"fmt"
 	"github.com/ipfs/go-cid"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"io/fs"
@@ -34,8 +37,9 @@ type OwnTimeline struct {
 
 type FollowingTimelines struct {
 	sync.RWMutex
-	Timelines     map[cid.Cid]*Timeline
-	FollowingCids []cid.Cid
+	Timelines      map[cid.Cid]*Timeline
+	FollowingCids  []cid.Cid
+	FollowingNames []string
 }
 
 func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline, error) {
@@ -62,10 +66,18 @@ func CreateOrReadTimeline(storagePath string, topic *pubsub.Topic) (*OwnTimeline
 	return storedTimeline, nil
 }
 
+func UpdateTimeline(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT) {
+	// TODO: RIGHT NOW, ALL THAT IS DONE IS JUST CONNECTING TO PROVIDER
+	dht2.HandleWithProviders(ctx, cid, kad, func(info peer.AddrInfo) error {
+		return nil
+	})
+}
+
 func ReadFollowingTimelines(ctx context.Context, storagePath string) (*FollowingTimelines, error) {
 	followingTimelines := &FollowingTimelines{
-		Timelines:     make(map[cid.Cid]*Timeline),
-		FollowingCids: make([]cid.Cid, 0),
+		Timelines:      make(map[cid.Cid]*Timeline),
+		FollowingCids:  make([]cid.Cid, 0),
+		FollowingNames: make([]string, 0),
 	}
 
 	err := filepath.Walk(storagePath, func(path string, info fs.FileInfo, err error) error {
@@ -89,6 +101,7 @@ func ReadFollowingTimelines(ctx context.Context, storagePath string) (*Following
 		}
 
 		followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, fileCid)
+		followingTimelines.FollowingNames = append(followingTimelines.FollowingNames, parts[1])
 		storedTimeline := Timeline{Path: path}
 
 		err = ReadTimelinePbFromFile(path, &storedTimeline.PB)
@@ -253,7 +266,7 @@ func MergeTimelines(t *PB, timelines []*Timeline) error {
 
 			if val, ok := contains[id]; ok && post.LastUpdated.AsTime().After(t.Posts[val].LastUpdated.AsTime()) {
 				t.Posts[val] = post
-			} else {
+			} else if !ok {
 				contains[id] = len(t.Posts)
 				t.Posts = append(t.Posts, post)
 			}

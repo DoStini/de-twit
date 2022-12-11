@@ -119,12 +119,28 @@ func main() {
 		return
 	}
 
-	dht.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
+	for idx, followingCid := range followingTimelines.FollowingCids {
+		// TODO: UPDATE TIMELINES, OR START GOROUTINE (not sure if needed) THAT DOES AS SUCH
+		// TODO: RIGHT NOW, ALL UPDATE TIMELINE DOES IS JUST CONNECT TO PEERS
+		// TODO: SO THAT PUB SUB IS RECONNECTED, maybe call Follow()?
+		timeline.UpdateTimeline(ctx, followingCid, kad)
+		// END: UPDATE TIMELINES
+
+		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines)
+		if err != nil {
+			logger.Println(err.Error())
+			continue
+		}
+	}
+	service.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
 
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
-	r := service.NewHTTP(ctx)
+	r, err := service.NewHTTP(ctx)
+	if err != nil {
+		logger.Fatalln(err)
+	}
 	r.RegisterGetRouting(kad)
 	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
