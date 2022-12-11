@@ -122,10 +122,6 @@ func main() {
 		return
 	}
 
-	dht.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
-
-	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
-
 	serverSentStream := service.NewServer()
 	serverSentStreamHandler := func(post *pb.Post) {
 		json, err := json2.Marshal(post)
@@ -137,13 +133,31 @@ func main() {
 		serverSentStream.Message <- string(json)
 	}
 
+	for idx, followingCid := range followingTimelines.FollowingCids {
+		timeline.UpdateTimeline(ctx, followingCid, kad)
+
+		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines, serverSentStreamHandler)
+		if err != nil {
+			logger.Println(err.Error())
+			continue
+		}
+	}
+	service.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
+
+	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
+
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
-	r := service.NewHTTP(ctx)
+
+	r, err := service.NewHTTP(ctx)
+	if err != nil {
+		logger.Fatalln(err)
+	}
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
 	}))
+
 	r.RegisterGetRouting(kad)
 	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
