@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -247,6 +248,34 @@ func (t *OwnTimeline) AddPost(text string, user string) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+type postID struct {
+	id   string
+	user string
+}
+
+func MergeTimelines(t *PB, timelines []*Timeline) error {
+	contains := make(map[postID]int)
+
+	for _, curTimeline := range timelines {
+		for _, post := range curTimeline.Posts {
+			id := postID{user: post.User, id: post.Id}
+
+			if val, ok := contains[id]; ok && post.LastUpdated.AsTime().After(t.Posts[val].LastUpdated.AsTime()) {
+				t.Posts[val] = post
+			} else if !ok {
+				contains[id] = len(t.Posts)
+				t.Posts = append(t.Posts, post)
+			}
+		}
+	}
+
+	sort.SliceStable(t.Posts, func(i, j int) bool {
+		return t.Posts[i].LastUpdated.AsTime().After(t.Posts[j].LastUpdated.AsTime())
+	})
 
 	return nil
 }
