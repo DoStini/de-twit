@@ -5,6 +5,7 @@ import (
 	"context"
 	"de-twit-go/src/common"
 	"de-twit-go/src/timeline"
+	"de-twit-go/src/timelinepb"
 	"encoding/binary"
 	"fmt"
 	"github.com/ipfs/go-cid"
@@ -55,12 +56,16 @@ func RegisterStreamHandler(ctx context.Context, host host.Host, nodeCid cid.Cid,
 		followingTimelines.RUnlock()
 
 		if followingTimeline != nil {
-			size := proto.Size(&followingTimeline.PB)
+			replyMessage := &timelinepb.GetReply{
+				Status:   timelinepb.ReplyStatus_OK,
+				Timeline: &followingTimeline.PB,
+			}
+			size := proto.Size(replyMessage)
 			reply = make([]byte, 0, size+binary.MaxVarintLen64+1)
 
 			reply = append(binary.AppendVarint(reply, int64(size)), 0)
 
-			buf, err := proto.Marshal(followingTimelines.Timelines[requestedCid])
+			buf, err := proto.Marshal(replyMessage)
 			if err != nil {
 				logger.Println("Failed to encode post:", err)
 				followingTimelines.RUnlock()
@@ -70,7 +75,23 @@ func RegisterStreamHandler(ctx context.Context, host host.Host, nodeCid cid.Cid,
 			reply = append(reply, buf...)
 		} else {
 			logger.Println(fmt.Sprintf("Node not following %s anymore", requestedCid))
-			reply = append(make([]byte, 0), 0)
+			replyMessage := &timelinepb.GetReply{
+				Status:   timelinepb.ReplyStatus_NOT_FOLLOWING,
+				Timeline: nil,
+			}
+			size := proto.Size(replyMessage)
+			reply = make([]byte, 0, size+binary.MaxVarintLen64+1)
+
+			reply = append(binary.AppendVarint(reply, int64(size)), 0)
+
+			buf, err := proto.Marshal(replyMessage)
+			if err != nil {
+				logger.Println("Failed to encode post:", err)
+				followingTimelines.RUnlock()
+				return
+			}
+
+			reply = append(reply, buf...)
 		}
 
 		_, err = rw.Write(reply)

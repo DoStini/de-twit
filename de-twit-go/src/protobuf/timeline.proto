@@ -5,6 +5,11 @@ import 'google/protobuf/timestamp.proto';
 
 option go_package = "src/timelinepb";
 
+enum ReplyStatus {
+  OK = 0;
+  NOT_FOLLOWING = 1;
+}
+
 message Timeline {
   // TODO: USER
   repeated Post posts = 1;
@@ -15,4 +20,9 @@ message Post {
   string text = 2;
   string user = 3;
   google.protobuf.Timestamp last_updated = 4;
+}
+
+message GetReply {
+  ReplyStatus status = 1;
+  Timeline timeline = 2;
 }
