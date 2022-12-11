@@ -8,6 +8,8 @@ import (
 	"de-twit-go/src/postupdater"
 	"de-twit-go/src/service"
 	"de-twit-go/src/timeline"
+	pb "de-twit-go/src/timelinepb"
+	json2 "encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gin-contrib/cors"
@@ -124,6 +126,17 @@ func main() {
 
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
+	serverSentStream := service.NewServer()
+	serverSentStreamHandler := func(post *pb.Post) {
+		json, err := json2.Marshal(post)
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
+		logger.Println(string(json))
+		serverSentStream.Message <- string(json)
+	}
+
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
 	r := service.NewHTTP(ctx)
 	r.Use(cors.New(cors.Config{
@@ -132,10 +145,11 @@ func main() {
 		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
 	}))
 	r.RegisterGetRouting(kad)
-	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
+	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
 	r.RegisterGetTimeline(followingTimelines)
+	r.RegisterGetTimelineStream(serverSentStream)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {

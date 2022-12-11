@@ -125,7 +125,7 @@ func (psu *PostUpdater) listenOnTopic(subscription *pubsub.Subscription) {
 	}
 }
 
-func (psu *PostUpdater) ListenOnFollowingTopic(user string, followingTimelines *timeline.FollowingTimelines) error {
+func (psu *PostUpdater) ListenOnFollowingTopic(user string, followingTimelines *timeline.FollowingTimelines, httpHandler func(post *pb.Post)) error {
 	var logger *log.Logger
 	logger = psu.ctx.Value("logger").(*log.Logger)
 	if logger == nil {
@@ -151,6 +151,7 @@ func (psu *PostUpdater) ListenOnFollowingTopic(user string, followingTimelines *
 			}
 			targetTimeline := followingTimelines.Timelines[targetCid]
 			err := targetTimeline.AddPost(postUpdate.Id, postUpdate.Text, postUpdate.User, postUpdate.LastUpdated)
+			httpHandler(postUpdate)
 			if err != nil {
 				return err
 			}

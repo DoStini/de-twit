@@ -10,9 +10,82 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 )
+
+type Event struct {
+	// Events are pushed to this channel by the main events-gathering routine
+	Message chan string
+
+	// New client connections
+	NewClients chan chan string
+
+	// Closed client connections
+	ClosedClients chan chan string
+
+	// Total client connections
+	TotalClients map[chan string]bool
+}
+
+type ClientChan chan string
+
+func NewServer() (event *Event) {
+	event = &Event{
+		Message:       make(chan string),
+		NewClients:    make(chan chan string),
+		ClosedClients: make(chan chan string),
+		TotalClients:  make(map[chan string]bool),
+	}
+
+	go event.listen()
+
+	return
+}
+
+func (stream *Event) serveHTTP() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Initialize client channel
+		clientChan := make(ClientChan)
+
+		// Send new connection to event server
+		stream.NewClients <- clientChan
+
+		defer func() {
+			// Send closed connection to event server
+			stream.ClosedClients <- clientChan
+		}()
+
+		c.Set("clientChan", clientChan)
+
+		c.Next()
+	}
+}
+
+func (stream *Event) listen() {
+	for {
+		select {
+		// Add new available client
+		case client := <-stream.NewClients:
+			stream.TotalClients[client] = true
+			log.Printf("Client added. %d registered clients", len(stream.TotalClients))
+
+		// Remove closed client
+		case client := <-stream.ClosedClients:
+			delete(stream.TotalClients, client)
+			close(client)
+			log.Printf("Removed client. %d registered clients", len(stream.TotalClients))
+
+		// Broadcast message to client
+		case eventMsg := <-stream.Message:
+			for clientMessageChan := range stream.TotalClients {
+				clientMessageChan <- eventMsg
+			}
+		}
+	}
+}
 
 type postRequest struct {
 	Text string `json:"text" binding:"required"`
@@ -46,6 +119,7 @@ func (r *HTTPServer) RegisterPostFollow(
 	kad *dht.IpfsDHT,
 	followingTimelines *timeline.FollowingTimelines,
 	postUpdater *postupdater.PostUpdater,
+	httpHandler func(post *timelinepb.Post),
 ) {
 	logger := common.GetLogger(r.ctx)
 	host := kad.Host()
@@ -98,7 +172,7 @@ func (r *HTTPServer) RegisterPostFollow(
 		}
 
 		// after follow, peers should be connected, so they belong on the same pub subnetwork
-		err = postUpdater.ListenOnFollowingTopic(user, followingTimelines)
+		err = postUpdater.ListenOnFollowingTopic(user, followingTimelines, httpHandler)
 		if err != nil {
 			logger.Println("PostFollow: Couldn't Listen on topic", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -216,6 +290,26 @@ func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines)
 
 		c.JSON(http.StatusOK, posts)
 		return
+	})
+}
+
+func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
+	r.GET("/timeline/stream", stream.serveHTTP(), func(c *gin.Context) {
+		v, ok := c.Get("clientChan")
+		if !ok {
+			return
+		}
+		clientChan, ok := v.(ClientChan)
+		if !ok {
+			return
+		}
+		c.Stream(func(w io.Writer) bool {
+			if msg, ok := <-clientChan; ok {
+				c.SSEvent("message", msg)
+				return true
+			}
+			return false
+		})
 	})
 }
 

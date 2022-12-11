@@ -5,7 +5,7 @@
     import type PostData from "../types/PostData.js";
     import {newPostsStore} from "../actions/posts";
     import {onMount} from "svelte";
-    import {retrieveTimeline} from "../services/posts";
+    import {registerPostsUpdate, retrieveTimeline} from "../services/posts";
     import NewPostModal from "../components/post/NewPostModal.svelte";
     import {closeNewPostModal, openNewPostModal} from "../actions/newPostModal.js";
     import {createPost} from "../services/posts.js";
@@ -47,9 +47,14 @@
             const posts = await retrieveTimeline()
             postsStore.set(posts)
         } catch (e) {
-
+            console.error(e)
         }
+    });
+
+    onMount(() => {
+        registerPostsUpdate()
     })
+
 </script>
 
 <Posts posts={posts} newPosts={newPosts}/>
