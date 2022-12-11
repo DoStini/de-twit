@@ -42,15 +42,6 @@
         }
     }
 
-    onMount(async () => {
-        try {
-            const posts = await retrieveTimeline()
-            postsStore.set(posts)
-        } catch (e) {
-            console.error(e)
-        }
-    });
-
     onMount(() => {
         registerPostsUpdate()
     })
