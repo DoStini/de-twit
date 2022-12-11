@@ -3,10 +3,15 @@ import type UserData from "../types/UserData";
 
 export const searchUser : (username: string) => (Promise<UserData>) = async (username) => {
     const data = await fetch(env.PUBLIC_URL + username)
-        .then(response => response.json())
-        .then(data => {
-            data.posts = data.posts
-            return data;
+        .then(async response => {
+            const json = await response.json()
+            return {response, json}
+        })
+        .then(({response, json}) => {
+            if (!response.ok) {
+                throw json
+            }
+            return json
         });
 
     return data;

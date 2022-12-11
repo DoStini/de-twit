@@ -26,6 +26,7 @@
             user = userData;
             loading = false;
             error = false
+            console.log(userData)
             return true;
         } catch (e) {
             console.error(e)
@@ -53,7 +54,7 @@
 
     const handleClose = () => {
         closeSearchUserModal()
-        resetUser()
+        setTimeout(resetUser, 200)
     }
 
     let open: boolean;
