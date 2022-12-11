@@ -1,7 +1,7 @@
 <script lang="ts">
     import "../app.postcss";
     import Fab from "../components/Fab.svelte";
-    import { postsStore } from "../actions/posts.js"
+    import {addNewPost, postsStore} from "../actions/posts.js"
     import type PostData from "../types/PostData.js";
     import {newPostsStore} from "../actions/posts";
     import {onMount} from "svelte";
@@ -23,11 +23,15 @@
     let handleCreatePost = async (data) => {
         loading = true
         try {
-            await createPost({
+            const post = {
                 username: env.PUBLIC_USERNAME,
                 text: data.content,
                 timestamp: new Date()
-            });
+            };
+
+            await createPost(post);
+            addNewPost(post)
+
             closeNewPostModal()
             loading = false
             return true

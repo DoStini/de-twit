@@ -1,20 +1,34 @@
 import type PostData from "../types/PostData";
-import {addNewPost} from "../actions/posts";
+import {env} from "$env/dynamic/public";
 
 export const createPost: (post: PostData) => (void) = async (post: PostData) => {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    addNewPost(post)
+    await fetch(env.PUBLIC_URL + "post/create", {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(post)
+    });
 }
 
 export const retrieveTimeline : () => (Promise<PostData[]>) = async () => {
-    return await Promise.resolve(
-        [
-            {username: "andremoreira9", text: "Awesome work guys!", timestamp: new Date()},
-            {username: "marga", text: "Great! I'm currently merging the timelines", timestamp: new Date()},
-            {username: "nuno", text: "Hi guys, I'm doing a massive refactor!", timestamp: new Date()},
-            {username: "andremoreira9", text: "Weird sandals indeed", timestamp: new Date()},
-            {username: "andremoreira9", text: "Weird sandals indeed 2", timestamp: new Date()},
-            {username: "andremoreira9", text: "Weird sandals indeed 3", timestamp: new Date()},
-        ]
-    )
+    const data = (await fetch(env.PUBLIC_URL + "timeline")
+        .then(response => response.json())
+        .then(data => {
+            return data;
+        }).catch(error => {
+
+            console.log(error);
+        return [];
+    })).map((item: any) => {
+        const { seconds, nanos } = item.last_updated;
+        item.timestamp = new Date(seconds*1000 + nanos*0.000001)
+        item.username = item.user
+
+        return item;
+    });
+
+
+    return data;
 }
