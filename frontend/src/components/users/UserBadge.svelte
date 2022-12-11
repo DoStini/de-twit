@@ -11,6 +11,8 @@
     export let redirect: boolean;
 
     export let follow: () => (Promise<boolean>)
+    export let close
+
 
     const onFollow = async () => {
         await follow()
@@ -25,7 +27,7 @@
         {:else }
             <div class="flex justify-between mb-4 content-center">
                 <div>
-                    <div class="text-xl text-accent">{user.username}</div>
+                    <div class="text-xl text-accent"><a on:click={() => close && close()} href="/{user.username}">{user.username}</a></div>
                     <div class="text-sm">
                         {#if user.posts.length === 0}
                             This user hasn't posted anything yet

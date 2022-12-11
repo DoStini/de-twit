@@ -88,7 +88,7 @@
         <form id="find-user-modal" on:submit|preventDefault={onSubmitSearch}>
             <h3 class="font-bold text-lg">Find friends!</h3>
             {#if user || error}
-                <UserBadge bind:user={user} loading={loading} error={error} follow={submitFollow} />
+                <UserBadge close={onClose} bind:user={user} loading={loading} error={error} follow={submitFollow} />
                 <div class="modal-action">
                     <div on:click={onClose} class="btn text-error mr-2">Cancel</div>
                     <div on:click={resetUser} class="btn {loading ? 'loading' : ''}">Search</div>

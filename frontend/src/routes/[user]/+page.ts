@@ -13,13 +13,11 @@ interface PageLoad {
 export async function load({ params }: PageLoad) {
     try {
         const userData = await searchUser(params.user);
-        userPostsStore.set(userData.posts)
         return {
             user: userData
         }
     } catch (e) {
         console.error(e)
-        postsStore.set([])
         return {
             error: e
         }

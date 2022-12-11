@@ -70,6 +70,17 @@
         }
     }
 
+    onMount(() => {
+        console.log("mount!")
+        if (data.error) {
+            userPostsStore.set([]);
+            return
+        }
+        userPostsStore.set(data.user.posts)
+    })
+
+    $: userPostsStore.set(data.user.posts)
+
 </script>
 
 {#if data.error}
@@ -90,7 +101,6 @@
                     loading={loading}
                     follow={submitFollow}
                 />
-
             </div>
         </div>
         <div class="sm:col-span-3 col-span-4">

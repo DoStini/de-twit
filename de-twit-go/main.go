@@ -122,10 +122,6 @@ func main() {
 		return
 	}
 
-	service.RegisterProvideRoutine(ctx, kad, followingTimelines, hostCid)
-
-	followingTimelines.Timelines[hostCid] = &storedTimeline.Timeline
-
 	serverSentStream := service.NewServer()
 	serverSentStreamHandler := func(post *pb.Post) {
 		json, err := json2.Marshal(post)
@@ -148,7 +144,6 @@ func main() {
 	}
 
 	service.RegisterProvideRoutine(ctx, kad, followingTimelines, hostCid)
-
 	followingTimelines.Timelines[hostCid] = &storedTimeline.Timeline
 
 	service.RegisterStreamHandler(ctx, host, hostCid, followingTimelines)
@@ -163,7 +158,6 @@ func main() {
 		AllowMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
 	}))
-
 	r.RegisterGetRouting(kad)
 	r.RegisterPostFollow(hostCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
