@@ -1,5 +1,6 @@
 de-twit-go/bootstrap
 de-twit-go/node
+de-twit-go/writetest
 de-twit-go/bootstraps/*.txt
 de-twit-go/storage/*/*
 de-twit-go/logs/*.log

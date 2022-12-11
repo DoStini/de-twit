@@ -72,13 +72,16 @@ func (r *HTTPServer) RegisterPostFollow(
 				return nil, &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "already following"}
 			}
 
-			receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+			receivedTimelinePB, err := Follow(r.ctx, targetCid, host, kad)
 			if err != nil {
 				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
 				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
-			receivedTimeline.Path = filepath.Join(storage, fmt.Sprintf("storage-%s", user))
+			receivedTimeline := &timeline.Timeline{
+				Path: filepath.Join(storage, fmt.Sprintf("storage-%s", user)),
+			}
+			receivedTimeline.Posts = receivedTimelinePB.Posts
 
 			err = receivedTimeline.WriteFile()
 			if err != nil {
