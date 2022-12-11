@@ -1,0 +1,10 @@
+<script>
+    import Navbar from "../components/Navbar.svelte";
+</script>
+
+<div class="bg-base-200 absolute w-full h-full">
+    <Navbar/>
+    <div class="bg-base-200 absolute w-full">
+        <slot></slot>
+    </div>
+</div>

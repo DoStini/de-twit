@@ -1,7 +1,7 @@
-bootstrap
-node
-bootstraps/*.txt
-storage/*/*
-logs/*.log
-*logs/*.log
+de-twit-go/bootstrap
+de-twit-go/node
+de-twit-go/bootstraps/*.txt
+de-twit-go/storage/*/*
+de-twit-go/logs/*.log
+de-twit-go/*logs/*.log
 *.idea
