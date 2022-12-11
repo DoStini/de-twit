@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/host"
 	"io"
 	"log"
 	"net/http"
@@ -309,6 +310,41 @@ func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
 				return true
 			}
 			return false
+		})
+	})
+}
+
+func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, kad *dht.IpfsDHT) gin.IRoutes {
+	return r.GET("/:user", func(c *gin.Context) {
+		user := c.Param("user")
+
+		targetCid, err := common.GenerateCid(ctx, user)
+
+		followingTimelines.RLock()
+
+		if common.Contains(followingTimelines.FollowingCids, targetCid) {
+			posts := followingTimelines.Timelines[targetCid].GetPosts()
+			c.JSON(http.StatusOK, gin.H{
+				"username":  user,
+				"posts":     posts,
+				"following": true,
+			})
+			followingTimelines.RUnlock()
+			return
+		}
+
+		followingTimelines.RUnlock()
+
+		receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"username":  user,
+			"following": false,
+			"posts":     receivedTimeline.GetPosts(),
 		})
 	})
 }

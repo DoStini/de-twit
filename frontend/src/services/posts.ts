@@ -2,7 +2,7 @@ import type PostData from "../types/PostData";
 import {env} from "$env/dynamic/public";
 import {addNewPost} from "../actions/posts";
 
-export let postsSSE;
+export let postsSSE: EventSource | null;
 
 const parsePost = (item: any) => {
     const { seconds, nanos } = item.last_updated;

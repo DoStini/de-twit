@@ -150,6 +150,7 @@ func main() {
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
 	r.RegisterGetTimeline(followingTimelines)
 	r.RegisterGetTimelineStream(serverSentStream)
+	r.RegisterGetUser(ctx, followingTimelines, host, kad)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {
