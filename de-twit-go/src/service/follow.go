@@ -71,7 +71,6 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 			if err != nil {
 				return err
 			}
-			logger.Println(len(sizeBuf), sizeBuf[0])
 			if len(sizeBuf) == 1 && sizeBuf[0] == 0 {
 				logger.Println("Received Nothing")
 				return nil
