@@ -3,7 +3,6 @@ package dht
 import (
 	"context"
 	"de-twit-go/src/common"
-	"de-twit-go/src/timeline"
 	"fmt"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
@@ -19,10 +18,13 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-var providerTTL = time.Hour
+var minProviders int32 = 5
+
+var ProviderTTL = time.Hour
 
 type NullValidator struct{}
 
@@ -87,13 +89,13 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 
 	h := createNode(ctx, port)
 
-	providers.ProvideValidity = providerTTL
+	providers.ProvideValidity = ProviderTTL
 	providerStore, err := providers.NewProviderManager(
 		ctx,
 		h.ID(),
 		h.Peerstore(),
 		sync2.MutexWrap(datastore.NewMapDatastore()),
-		providers.CleanupInterval(providerTTL/2),
+		providers.CleanupInterval(ProviderTTL/2),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -152,31 +154,43 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 	return kad, h, nil
 }
 
-func RegisterProvideRoutine(ctx context.Context, kad *dht.IpfsDHT, followingTimelines *timeline.FollowingTimelines, nodeCid cid.Cid) {
+func HandleWithProviders(ctx context.Context, cid cid.Cid, kad *dht.IpfsDHT, work func(peer.AddrInfo) error) {
+	var count atomic.Int32
 	logger := common.GetLogger(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 
-	go func() {
-		ticker := time.NewTicker(providerTTL / 2)
+	var wg sync.WaitGroup
+	peerChan := kad.FindProvidersAsync(ctx, cid, 0)
+	guard := make(chan struct{}, minProviders)
 
-		// timer but first tick is instantaneous
-		for ; true; <-ticker.C {
-			go func() {
-				err := kad.Provide(ctx, nodeCid, true)
-				if err != nil {
-					logger.Println(err.Error())
-				}
-			}()
+	for p := range peerChan {
+		wg.Add(1)
+		go func(info peer.AddrInfo) {
+			defer wg.Done()
 
-			followingTimelines.RLock()
-			for _, followingCid := range followingTimelines.FollowingCids {
-				go func(followingCid cid.Cid) {
-					err := kad.Provide(ctx, followingCid, true)
-					if err != nil {
-						logger.Println(err.Error())
-					}
-				}(followingCid)
+			guard <- struct{}{}
+			defer func() { <-guard }()
+			if count.Load() >= minProviders {
+				cancel()
+				return
 			}
-			followingTimelines.RUnlock()
-		}
-	}()
+
+			if err := kad.Host().Connect(ctx, info); err != nil {
+				logger.Println(err.Error())
+				return
+			}
+
+			err := work(info)
+			if err != nil {
+				logger.Println(err.Error())
+				return
+			}
+
+			count.Add(1)
+		}(p)
+	}
+	wg.Wait()
+	cancel()
+
+	logger.Printf("Connected to %d peers\n", count.Load())
 }

@@ -148,13 +148,16 @@ func (r *HTTPServer) RegisterPostFollow(
 				return nil, &errorResponse{errorCode: http.StatusUnprocessableEntity, reason: "already following"}
 			}
 
-			receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+			receivedTimelinePB, err := Follow(r.ctx, targetCid, host, kad)
 			if err != nil {
 				logger.Println("PostFollow: Couldn't Follow: ", err.Error())
 				return nil, &errorResponse{errorCode: http.StatusInternalServerError, reason: err.Error()}
 			}
 
-			receivedTimeline.Path = filepath.Join(storage, fmt.Sprintf("storage-%s", user))
+			receivedTimeline := &timeline.Timeline{
+				Path: filepath.Join(storage, fmt.Sprintf("storage-%s", user)),
+			}
+			receivedTimeline.Posts = receivedTimelinePB.Posts
 
 			err = receivedTimeline.WriteFile()
 			if err != nil {
@@ -163,6 +166,7 @@ func (r *HTTPServer) RegisterPostFollow(
 			}
 
 			followingTimelines.FollowingCids = append(followingTimelines.FollowingCids, targetCid)
+			followingTimelines.FollowingNames = append(followingTimelines.FollowingNames, user)
 			followingTimelines.Timelines[targetCid] = receivedTimeline
 
 			return receivedTimeline, nil
@@ -230,6 +234,7 @@ func (r *HTTPServer) RegisterPostUnfollow(
 
 			delete(followingTimelines.Timelines, targetCid)
 			followingTimelines.FollowingCids = common.RemoveIndex(followingTimelines.FollowingCids, targetIndex)
+			followingTimelines.FollowingNames = common.RemoveIndex(followingTimelines.FollowingNames, targetIndex)
 
 			err = targetTimeline.DeleteFile()
 			if err != nil {
@@ -282,12 +287,15 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
 	return r.GET("/timeline", func(c *gin.Context) {
 		posts := make([]*timelinepb.Post, 0)
+		timelines.RLock()
 
 		for _, currentTimeline := range timelines.Timelines {
 			for _, post := range currentTimeline.Posts {
 				posts = append(posts, post)
 			}
 		}
+
+		timelines.RUnlock()
 
 		c.JSON(http.StatusOK, posts)
 		return
@@ -360,9 +368,15 @@ func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *ti
 
 func NewHTTP(
 	ctx context.Context,
-) *HTTPServer {
-	return &HTTPServer{
-		Engine: gin.Default(),
-		ctx:    ctx,
+) (*HTTPServer, error) {
+	r := gin.Default()
+	err := r.SetTrustedProxies(nil)
+	if err != nil {
+		return nil, err
 	}
+
+	return &HTTPServer{
+		Engine: r,
+		ctx:    ctx,
+	}, nil
 }

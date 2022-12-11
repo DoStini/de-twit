@@ -35,7 +35,7 @@ func GenerateCid(ctx context.Context, key string) (cid.Cid, error) {
 	return c, err
 }
 
-func Contains(list []cid.Cid, val cid.Cid) bool {
+func Contains[K comparable](list []K, val K) bool {
 	for _, b := range list {
 		if b == val {
 			return true
@@ -44,7 +44,7 @@ func Contains(list []cid.Cid, val cid.Cid) bool {
 	return false
 }
 
-func FindIndex(list []cid.Cid, val cid.Cid) int {
+func FindIndex[K comparable](list []K, val K) int {
 	for i, b := range list {
 		if b == val {
 			return i
@@ -53,7 +53,7 @@ func FindIndex(list []cid.Cid, val cid.Cid) int {
 	return -1
 }
 
-func RemoveIndex(list []cid.Cid, index int) []cid.Cid {
+func RemoveIndex[K any](list []K, index int) []K {
 	last := len(list) - 1
 	list[index] = list[last]
 	list = list[:last]
