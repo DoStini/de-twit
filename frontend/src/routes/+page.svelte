@@ -1,48 +1,64 @@
 <script lang="ts">
     import "../app.postcss";
-    import Posts from "../components/post/Posts.svelte";
     import Fab from "../components/Fab.svelte";
+    import {addNewPost, postsStore} from "../actions/posts.js"
     import type PostData from "../types/PostData.js";
+    import {newPostsStore} from "../actions/posts";
+    import {onMount} from "svelte";
+    import {registerPostsUpdate, retrieveTimeline} from "../services/posts";
+    import NewPostModal from "../components/post/NewPostModal.svelte";
+    import {closeNewPostModal, openNewPostModal} from "../actions/newPostModal.js";
+    import {createPost} from "../services/posts.js";
+    import {env} from "$env/dynamic/public";
+    import Posts from "../components/post/Posts.svelte";
 
-    const posts: PostData[] = [
-        {
-            username: "andremoreira9",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "andremoreira9",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "nuno",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "marga",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "andremoreira9",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "marga",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-        {
-            username: "marga",
-            text: "A beterraba caiu do céu! Finalmente :) \n Portugal ganhou! alé alé alé!",
-            timestamp: new Date(Date.now())
-        },
-    ];
+    let posts: PostData[]
+    postsStore.subscribe((value) => posts = value)
+
+    let newPosts: PostData[]
+    newPostsStore.subscribe((value) => newPosts = value)
+
+    let loading: boolean = false
+
+    let handleCreatePost = async (data) => {
+        loading = true
+        try {
+            const post = {
+                username: env.PUBLIC_USERNAME,
+                text: data.content,
+                timestamp: new Date()
+            };
+
+            await createPost(post);
+            addNewPost(post)
+
+            closeNewPostModal()
+            loading = false
+            return true
+        } catch (e) {
+            console.error(e)
+            loading = false
+            return true
+        }
+    }
+
+    onMount(async () => {
+        try {
+            const posts = await retrieveTimeline()
+            postsStore.set(posts)
+        } catch (e) {
+            console.error(e)
+        }
+    });
+
+    onMount(() => {
+        registerPostsUpdate()
+    })
+
 </script>
 
-<Posts posts={posts}/>
+<Posts posts={posts} newPosts={newPosts}/>
 
-<Fab/>
+<Fab action={openNewPostModal}/>
+
+<NewPostModal loading={loading} close={closeNewPostModal} submit={handleCreatePost}/>

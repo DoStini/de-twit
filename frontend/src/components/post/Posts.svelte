@@ -1,20 +1,36 @@
 <script lang="ts">
     import Post from "./Post.svelte";
     import type PostData from "../../types/PostData.js";
+    import NewPostsBadge from "./NewPostsBadge.svelte";
+    import {refreshTimeline} from "../../actions/posts.js";
+    import {env} from "$env/dynamic/public";
 
     export let posts: [PostData];
+    export let newPosts: [PostData];
+
+    const refreshPosts = () => {
+        refreshTimeline()
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
 </script>
 
+{ #if newPosts.length > 0}
+    <NewPostsBadge action={refreshPosts} newPostsCount={newPosts.length} />
+{/if}
+
 { #if posts.length === 0 }
-    <h4>
-        Nothing to show! Post something or find other users to follow
-    </h4>
+    <div class="flex items-center justify-center m-5">
+        <span class="text-xl">
+            Nothing to show! Post something or find other users to follow!
+        </span>
+    </div>
 {:else }
     <div class="grid grid-cols-8 gap-4 sm:m-20 m-5">
 
     {#each posts as post}
-        {@const colStartPosition = post.username === "andremoreira9" ? 2 : 3}
-        <div class="sm:col-start-{colStartPosition} sm:col-span-5 col-span-12">
+        {@const isUser = post.username === env.PUBLIC_USERNAME }
+        <div class="{isUser ? 'card-show-user' : 'card-show-other'}">
             <Post post="{post}"></Post>
         </div>
 

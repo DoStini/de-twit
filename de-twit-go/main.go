@@ -8,8 +8,11 @@ import (
 	"de-twit-go/src/postupdater"
 	"de-twit-go/src/service"
 	"de-twit-go/src/timeline"
+	pb "de-twit-go/src/timelinepb"
+	json2 "encoding/json"
 	"flag"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"log"
 	"os"
 	"path/filepath"
@@ -119,14 +122,21 @@ func main() {
 		return
 	}
 
-	for idx, followingCid := range followingTimelines.FollowingCids {
-		// TODO: UPDATE TIMELINES, OR START GOROUTINE (not sure if needed) THAT DOES AS SUCH
-		// TODO: RIGHT NOW, ALL UPDATE TIMELINE DOES IS JUST CONNECT TO PEERS
-		// TODO: SO THAT PUB SUB IS RECONNECTED, maybe call Follow()?
-		timeline.UpdateTimeline(ctx, followingCid, kad)
-		// END: UPDATE TIMELINES
+	serverSentStream := service.NewServer()
+	serverSentStreamHandler := func(post *pb.Post) {
+		json, err := json2.Marshal(post)
+		if err != nil {
+			logger.Println(err.Error())
+			return
+		}
+		logger.Println(string(json))
+		serverSentStream.Message <- string(json)
+	}
 
-		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines)
+	for idx, followingCid := range followingTimelines.FollowingCids {
+		timeline.UpdateTimeline(ctx, followingCid, kad)
+
+		err := postUpdater.ListenOnFollowingTopic(followingTimelines.FollowingNames[idx], followingTimelines, serverSentStreamHandler)
 		if err != nil {
 			logger.Println(err.Error())
 			continue
@@ -137,14 +147,23 @@ func main() {
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
+
 	r, err := service.NewHTTP(ctx)
 	if err != nil {
 		logger.Fatalln(err)
 	}
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
+		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
+	}))
+
 	r.RegisterGetRouting(kad)
-	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
+	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
+	r.RegisterGetTimeline(followingTimelines)
+	r.RegisterGetTimelineStream(serverSentStream)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {

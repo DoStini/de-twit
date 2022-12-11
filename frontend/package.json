@@ -30,6 +30,7 @@
   },
   "type": "module",
   "dependencies": {
-    "daisyui": "^2.43.0"
+    "daisyui": "^2.43.0",
+    "dotenv": "^16.0.3"
   }
 }
