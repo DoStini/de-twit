@@ -5,8 +5,11 @@ import (
 	"de-twit-go/src/common"
 	"fmt"
 	"github.com/ipfs/go-cid"
+	"github.com/ipfs/go-datastore"
+	sync2 "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -16,9 +19,12 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var minProviders int32 = 5
+
+var ProviderTTL = time.Hour
 
 type NullValidator struct{}
 
@@ -83,10 +89,23 @@ func NewDHT(ctx context.Context, port int64, bootstrapNodes []string) (*dht.Ipfs
 
 	h := createNode(ctx, port)
 
+	providers.ProvideValidity = ProviderTTL
+	providerStore, err := providers.NewProviderManager(
+		ctx,
+		h.ID(),
+		h.Peerstore(),
+		sync2.MutexWrap(datastore.NewMapDatastore()),
+		providers.CleanupInterval(ProviderTTL/2),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	opts := []dht.Option{
 		dht.Mode(dht.ModeServer),
 		dht.Validator(NullValidator{}),
 		dht.ProtocolPrefix("/p2p"),
+		dht.ProviderStore(providerStore),
 	}
 
 	for _, node := range bootstrapNodes {

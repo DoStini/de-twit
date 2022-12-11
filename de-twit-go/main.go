@@ -113,12 +113,6 @@ func main() {
 		return
 	}
 
-	err = kad.Provide(ctx, nodeCid, true)
-	if err != nil {
-		logger.Fatalf(err.Error())
-		return
-	}
-
 	followingTimelines, err := timeline.ReadFollowingTimelines(ctx, inputCommands.storage)
 	if err != nil {
 		logger.Fatalf(err.Error())
@@ -137,14 +131,8 @@ func main() {
 			logger.Println(err.Error())
 			continue
 		}
-
-		// TODO: MOVE TO GOROUTINE
-		err = kad.Provide(ctx, followingCid, true)
-		if err != nil {
-			logger.Fatalf(err.Error())
-			return
-		}
 	}
+	service.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
 
 	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
 

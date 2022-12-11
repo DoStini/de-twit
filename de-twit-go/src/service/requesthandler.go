@@ -105,6 +105,13 @@ func (r *HTTPServer) RegisterPostFollow(
 			return
 		}
 
+		err = kad.Provide(r.ctx, targetCid, true)
+		if err != nil {
+			logger.Println("PostFollow: Couldn't Provide", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
 		posts := make([]string, 0)
 		for _, post := range receivedTimeline.Posts {
 			posts = append(posts, fmt.Sprintf("%s: %s", post.GetLastUpdated().String(), post.GetText()))
