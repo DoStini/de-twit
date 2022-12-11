@@ -3,10 +3,22 @@
 @tailwind components;
 @tailwind utilities;
 
+.posts-card-grid {
+    @apply grid sm:grid-cols-8 gap-4 sm:m-20 m-5
+}
+
+.posts-card-grid-center {
+    @apply grid sm:grid-cols-9 gap-4 sm:m-20 m-5
+}
+
 .card-show-user {
-    @apply sm:col-start-2 sm:col-start-2 sm:col-span-5 col-span-12;
+    @apply sm:col-start-2 sm:col-span-5 col-span-12;
 }
 
 .card-show-other {
-    @apply sm:col-start-3 sm:col-start-3 sm:col-span-5 col-span-12;
+    @apply sm:col-start-3 sm:col-span-5 col-span-12;
+}
+
+.card-show-center {
+    @apply col-span-12;
 }

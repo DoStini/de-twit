@@ -1,5 +1,7 @@
 import {env} from "$env/dynamic/public";
 import type UserData from "../types/UserData";
+import {parsePost} from "./posts";
+import type PostData from "../types/PostData";
 
 export const searchUser : (username: string) => (Promise<UserData>) = async (username) => {
     const data = await fetch(env.PUBLIC_URL + username)
@@ -11,6 +13,7 @@ export const searchUser : (username: string) => (Promise<UserData>) = async (use
             if (!response.ok) {
                 throw json
             }
+            json.posts = json.posts.map(parsePost)
             return json
         });
 

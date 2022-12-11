@@ -6,6 +6,9 @@
     export let user: UserData
     export let error: boolean
     export let loading: boolean
+    export let background: string;
+    export let margin: string
+    export let redirect: boolean;
 
     export let follow: () => (Promise<boolean>)
 
@@ -15,7 +18,7 @@
 
 </script>
 
-<div class="card bg-base-200 shadow-xl my-5 mx-0">
+<div class="card {background ? background : 'bg-base-200'} shadow-xl {margin ? margin :  'my-5 mx-0'}">
     <div class="card-body">
         {#if error}
             <div class="text-xl">User not found</div>

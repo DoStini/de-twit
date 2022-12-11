@@ -1,4 +1,6 @@
 <script lang="ts">
+    import "../app.postcss";
+
     import Navbar from "../components/Navbar.svelte";
     import SearchUserModal from "../components/users/SearchUserModal.svelte";
 

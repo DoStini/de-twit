@@ -1,7 +1,6 @@
 <script lang="ts">
-    import "../app.postcss";
     import Fab from "../components/Fab.svelte";
-    import {addNewPost, postsStore} from "../actions/posts.js"
+    import {addNewPost, postsStore, refreshTimeline} from "../actions/posts.js"
     import type PostData from "../types/PostData.js";
     import {newPostsStore} from "../actions/posts";
     import {onMount} from "svelte";
@@ -43,12 +42,17 @@
     }
 
     onMount(() => {
-        registerPostsUpdate()
+        const sse = registerPostsUpdate(addNewPost)
+        return () => sse.close()
     })
 
 </script>
 
-<Posts posts={posts} newPosts={newPosts}/>
+<Posts emptyPostsMessage="Nothing to show! Post something or find other users to follow!"
+       mainTimeline={true}
+       newPosts={newPosts}
+       posts={posts}
+       refreshTimeline={refreshTimeline}/>
 
 <Fab action={openNewPostModal}/>
 

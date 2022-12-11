@@ -281,11 +281,11 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 
 func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
 	return r.GET("/timeline", func(c *gin.Context) {
-		posts := make([]timelinepb.Post, 0)
+		posts := make([]*timelinepb.Post, 0)
 
 		for _, currentTimeline := range timelines.Timelines {
 			for _, post := range currentTimeline.Posts {
-				posts = append(posts, *post)
+				posts = append(posts, post)
 			}
 		}
 
@@ -314,7 +314,7 @@ func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
 	})
 }
 
-func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, kad *dht.IpfsDHT) gin.IRoutes {
+func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
 	return r.GET("/:user", func(c *gin.Context) {
 		user := c.Param("user")
 
@@ -322,8 +322,11 @@ func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *ti
 
 		followingTimelines.RLock()
 
-		if common.Contains(followingTimelines.FollowingCids, targetCid) {
+		if targetCid == hostCid || common.Contains(followingTimelines.FollowingCids, targetCid) {
 			posts := followingTimelines.Timelines[targetCid].GetPosts()
+			if posts == nil {
+				posts = make([]*timelinepb.Post, 0)
+			}
 			c.JSON(http.StatusOK, gin.H{
 				"username":  user,
 				"posts":     posts,
@@ -339,12 +342,18 @@ func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *ti
 
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		posts := receivedTimeline.GetPosts()
+		if posts == nil {
+			posts = make([]*timelinepb.Post, 0)
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"username":  user,
 			"following": false,
-			"posts":     receivedTimeline.GetPosts(),
+			"posts":     posts,
 		})
 	})
 }
