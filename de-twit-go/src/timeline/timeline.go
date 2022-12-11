@@ -257,7 +257,7 @@ type postID struct {
 	user string
 }
 
-func MergeTimelines(t *PB, timelines []*Timeline) error {
+func MergeTimelines(t *PB, timelines []*PB) error {
 	contains := make(map[postID]int)
 
 	for _, curTimeline := range timelines {

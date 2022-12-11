@@ -23,7 +23,7 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 	logger := ctx.Value("logger").(*log.Logger)
 
 	var timelineLock sync.RWMutex
-	var receivedTimelines []*timeline.Timeline
+	var receivedTimelines []*timelinepb.Timeline
 	var peerResps []string
 
 	dht2.HandleWithProviders(ctx, targetCid, kad, func(info peer.AddrInfo) error {
@@ -56,11 +56,6 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 			if err != nil {
 				return err
 			}
-			if len(sizeBuf) == 1 && sizeBuf[0] == 0 {
-				logger.Println("Received Nothing")
-				return nil
-			}
-
 			size, i := binary.Varint(sizeBuf)
 			if i <= 0 {
 				return errors.New("value larger than 64 bits")
@@ -73,9 +68,9 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 				return err
 			}
 
-			var t timeline.Timeline
+			var reply timelinepb.GetReply
 
-			err = proto.Unmarshal(resp, &t)
+			err = proto.Unmarshal(resp, &reply)
 			if err != nil {
 				logger.Println(err.Error())
 				timelineLock.Lock()
@@ -86,12 +81,21 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 				return err
 			}
 
-			timelineLock.Lock()
+			if reply.Status == timelinepb.ReplyStatus_OK {
+				timelineLock.Lock()
 
-			peerResps = append(peerResps, t.String())
-			receivedTimelines = append(receivedTimelines, &t)
+				peerResps = append(peerResps, reply.Timeline.String())
+				receivedTimelines = append(receivedTimelines, reply.Timeline)
 
-			timelineLock.Unlock()
+				timelineLock.Unlock()
+			} else {
+				timelineLock.Lock()
+
+				logger.Println("Reply Status: Not Following")
+				peerResps = append(peerResps, reply.Timeline.String())
+
+				timelineLock.Unlock()
+			}
 
 			return nil
 		}()
