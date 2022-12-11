@@ -110,7 +110,7 @@ func main() {
 		return
 	}
 
-	nodeCid, err := common.GenerateCid(ctx, inputCommands.username)
+	hostCid, err := common.GenerateCid(ctx, inputCommands.username)
 	if err != nil {
 		logger.Fatalf(err.Error())
 		return
@@ -142,28 +142,29 @@ func main() {
 			continue
 		}
 	}
-	service.RegisterProvideRoutine(ctx, kad, followingTimelines, nodeCid)
 
-	followingTimelines.Timelines[nodeCid] = &storedTimeline.Timeline
+	service.RegisterProvideRoutine(ctx, kad, followingTimelines, hostCid)
+	followingTimelines.Timelines[hostCid] = &storedTimeline.Timeline
 
-	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
+	service.RegisterStreamHandler(ctx, host, hostCid, followingTimelines)
 
 	r, err := service.NewHTTP(ctx)
 	if err != nil {
 		logger.Fatalln(err)
 	}
+
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
 	}))
-
 	r.RegisterGetRouting(kad)
-	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
+	r.RegisterPostFollow(hostCid, inputCommands.storage, kad, followingTimelines, postUpdater, serverSentStreamHandler)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
 	r.RegisterGetTimeline(followingTimelines)
 	r.RegisterGetTimelineStream(serverSentStream)
+	r.RegisterGetUser(ctx, followingTimelines, host, hostCid, kad)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {

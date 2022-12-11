@@ -2,9 +2,7 @@ import type PostData from "../types/PostData";
 import {env} from "$env/dynamic/public";
 import {addNewPost} from "../actions/posts";
 
-export let postsSSE;
-
-const parsePost = (item: any) => {
+export const parsePost = (item: any) => {
     const { seconds, nanos } = item.last_updated;
     item.timestamp = new Date(seconds*1000 + nanos*0.000001)
     item.username = item.user
@@ -37,14 +35,12 @@ export const retrieveTimeline : () => (Promise<PostData[]>) = async () => {
     return data;
 }
 
-export const registerPostsUpdate = () => {
-    if (postsSSE != null) {
-        postsSSE.close()
-        return
-    }
-    postsSSE = new EventSource(env.PUBLIC_URL + "timeline/stream");
+export const registerPostsUpdate = (callback: (post: PostData) => (void)) => {
+    const postsSSE = new EventSource(env.PUBLIC_URL + "timeline/stream");
     postsSSE.onmessage = (event: MessageEvent) => {
         let response = parsePost(JSON.parse(event.data));
-        addNewPost(response)
+        callback(response)
     }
+
+    return postsSSE
 }

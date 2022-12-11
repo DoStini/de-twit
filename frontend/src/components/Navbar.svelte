@@ -1,4 +1,6 @@
 <script lang="ts">
+import {openSearchUserModal} from "../actions/searchUserModal.js";
+import {env} from "$env/dynamic/public";
 </script>
 
 <div class="navbar bg-base-100">
@@ -6,10 +8,10 @@
 
     </div>
     <div class="navbar-center">
-        <a class="btn btn-ghost normal-case text-xl">De-Twit</a>
+        <a href="/" class="btn btn-ghost normal-case text-xl">De-Twit</a>
     </div>
     <div class="navbar-end">
-        <button class="btn btn-ghost btn-circle">
+        <button class="btn btn-ghost btn-circle" on:click={openSearchUserModal}>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
         </button>
         <button class="btn btn-ghost btn-circle">
@@ -28,7 +30,7 @@
                 </div>
             </label>
             <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
-                <li><a>View profile</a></li>
+                <li><a href="/{env.PUBLIC_USERNAME}">View profile</a></li>
                 <li><a class="text-error">Delete account</a></li>
             </ul>
         </button>

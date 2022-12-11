@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/host"
 	"io"
 	"log"
 	"net/http"
@@ -285,12 +286,12 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 
 func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
 	return r.GET("/timeline", func(c *gin.Context) {
-		posts := make([]timelinepb.Post, 0)
+		posts := make([]*timelinepb.Post, 0)
 		timelines.RLock()
 
 		for _, currentTimeline := range timelines.Timelines {
 			for _, post := range currentTimeline.Posts {
-				posts = append(posts, *post)
+				posts = append(posts, post)
 			}
 		}
 
@@ -317,6 +318,50 @@ func (r *HTTPServer) RegisterGetTimelineStream(stream *Event) {
 				return true
 			}
 			return false
+		})
+	})
+}
+
+func (r *HTTPServer) RegisterGetUser(ctx context.Context, followingTimelines *timeline.FollowingTimelines, host host.Host, hostCid cid.Cid, kad *dht.IpfsDHT) gin.IRoutes {
+	return r.GET("/:user", func(c *gin.Context) {
+		user := c.Param("user")
+
+		targetCid, err := common.GenerateCid(ctx, user)
+
+		followingTimelines.RLock()
+
+		if targetCid == hostCid || common.Contains(followingTimelines.FollowingCids, targetCid) {
+			posts := followingTimelines.Timelines[targetCid].GetPosts()
+			if posts == nil {
+				posts = make([]*timelinepb.Post, 0)
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"username":  user,
+				"posts":     posts,
+				"following": true,
+			})
+			followingTimelines.RUnlock()
+			return
+		}
+
+		followingTimelines.RUnlock()
+
+		receivedTimeline, err := Follow(r.ctx, targetCid, host, kad)
+
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		posts := receivedTimeline.GetPosts()
+		if posts == nil {
+			posts = make([]*timelinepb.Post, 0)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"username":  user,
+			"following": false,
+			"posts":     posts,
 		})
 	})
 }
