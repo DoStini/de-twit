@@ -23,7 +23,7 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 
 	var peers []peer.AddrInfo
 
-	peerChan := kad.FindProvidersAsync(ctx, targetCid, 5)
+	peerChan := kad.FindProvidersAsync(ctx, targetCid, 0)
 	for p := range peerChan {
 		peers = append(peers, p)
 	}
@@ -119,22 +119,30 @@ func Follow(ctx context.Context, targetCid cid.Cid, host host.Host, kad *dht.Ipf
 	return &finalTimeline, err
 }
 
+type postID struct {
+	id   string
+	user string
+}
+
 func mergeTimelines(t *timelinepb.Timeline, timelines []*timeline.Timeline) error {
-	posts := make([]*timelinepb.Post, 0)
+	contains := make(map[postID]int)
 
 	for _, curTimeline := range timelines {
-		posts = append(posts, curTimeline.Posts...)
-	}
+		for _, post := range curTimeline.Posts {
+			id := postID{user: post.User, id: post.Id}
 
-	sort.SliceStable(posts, func(i, j int) bool {
-		return posts[i].LastUpdated.AsTime().After(posts[j].LastUpdated.AsTime())
-	})
-
-	for _, post := range posts {
-		if !containsPost(t.Posts, post) {
-			t.Posts = append(t.Posts, post)
+			if val, ok := contains[id]; ok && post.LastUpdated.AsTime().After(t.Posts[val].LastUpdated.AsTime()) {
+				t.Posts[val] = post
+			} else {
+				contains[id] = len(t.Posts)
+				t.Posts = append(t.Posts, post)
+			}
 		}
 	}
+
+	sort.SliceStable(t.Posts, func(i, j int) bool {
+		return t.Posts[i].LastUpdated.AsTime().After(t.Posts[j].LastUpdated.AsTime())
+	})
 
 	return nil
 }
