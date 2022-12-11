@@ -286,12 +286,15 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
 	return r.GET("/timeline", func(c *gin.Context) {
 		posts := make([]timelinepb.Post, 0)
+		timelines.RLock()
 
 		for _, currentTimeline := range timelines.Timelines {
 			for _, post := range currentTimeline.Posts {
 				posts = append(posts, *post)
 			}
 		}
+
+		timelines.RUnlock()
 
 		c.JSON(http.StatusOK, posts)
 		return
