@@ -5,6 +5,7 @@ import (
 	"de-twit-go/src/common"
 	"de-twit-go/src/postupdater"
 	"de-twit-go/src/timeline"
+	"de-twit-go/src/timelinepb"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
@@ -200,6 +201,21 @@ func (r *HTTPServer) RegisterPostCreate(username string, storedTimeline *timelin
 		}
 
 		c.String(http.StatusOK, "")
+	})
+}
+
+func (r *HTTPServer) RegisterGetTimeline(timelines *timeline.FollowingTimelines) gin.IRoutes {
+	return r.GET("/timeline", func(c *gin.Context) {
+		posts := make([]timelinepb.Post, 0)
+
+		for _, currentTimeline := range timelines.Timelines {
+			for _, post := range currentTimeline.Posts {
+				posts = append(posts, *post)
+			}
+		}
+
+		c.JSON(http.StatusOK, posts)
+		return
 	})
 }
 

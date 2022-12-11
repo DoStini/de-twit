@@ -27,8 +27,8 @@ export const retrieveTimeline : () => (Promise<PostData[]>) = async () => {
         item.username = item.user
 
         return item;
-    });
-
+    }).sort(((item1: { timestamp: number; }, item2: { timestamp: number; }) => item2.timestamp - item1.timestamp));
+    // TODO: ORDER FROM BACKEND
 
     return data;
 }

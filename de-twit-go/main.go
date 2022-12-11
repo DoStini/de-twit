@@ -10,6 +10,7 @@ import (
 	"de-twit-go/src/timeline"
 	"flag"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"log"
 	"os"
 	"path/filepath"
@@ -125,10 +126,16 @@ func main() {
 
 	service.RegisterStreamHandler(ctx, host, nodeCid, followingTimelines)
 	r := service.NewHTTP(ctx)
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"POST", "PUT", "PATCH", "DELETE"},
+		AllowHeaders: []string{"Content-Type,access-control-allow-origin, access-control-allow-headers"},
+	}))
 	r.RegisterGetRouting(kad)
 	r.RegisterPostFollow(nodeCid, inputCommands.storage, kad, followingTimelines, postUpdater)
 	r.RegisterPostUnfollow(followingTimelines, postUpdater)
 	r.RegisterPostCreate(inputCommands.username, storedTimeline)
+	r.RegisterGetTimeline(followingTimelines)
 
 	err = r.Run(fmt.Sprintf(":%d", inputCommands.serverPort))
 	if err != nil {
