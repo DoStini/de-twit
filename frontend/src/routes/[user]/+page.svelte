@@ -70,16 +70,14 @@
         }
     }
 
-    onMount(() => {
+    $: (() => {
         console.log("mount!")
         if (data.error) {
             userPostsStore.set([]);
             return
         }
         userPostsStore.set(data.user.posts)
-    })
-
-    $: userPostsStore.set(data.user.posts)
+    })()
 
 </script>
 
